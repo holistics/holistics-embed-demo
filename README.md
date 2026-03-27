@@ -1,16 +1,50 @@
-# React + Vite
+# Holistics Embed Demo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
 
-Currently, two official plugins are available:
+![](./holistics-embed-demo.png)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- **Secure JWT signing** — backend signs tokens so your embed secret is never exposed to the browser
+- **Multi-user simulation** — switch between mock users to test row-level security
+- **Embed debugger** — inspect the JWT payload and generated iframe URL
+- **HTTPS dev server** — satisfies Holistics CSP requirements for framing
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+- **Frontend**: React, Vite, Tailwind CSS
+- **Backend**: Node.js, Express, `jsonwebtoken`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Getting Started
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment variables
+
+Create a `.env` file in the project root:
+
+```env
+HOLISTICS_EMBED_KEY=your_embed_key_here
+HOLISTICS_EMBED_SECRET=your_embed_secret_here
+```
+
+### 3. Start the backend server
+
+```bash
+npm run server
+# → http://localhost:3001
+```
+
+### 4. Start the frontend (in a separate terminal)
+
+```bash
+npm run dev
+# → https://localhost:5173
+```
+
+Open <https://localhost:5173> in your browser. Accept the self-signed certificate warning.
