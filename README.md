@@ -8,6 +8,7 @@ A demo app showing how to securely embed [Holistics](https://www.holistics.io/) 
 
 - **Secure JWT signing** — backend signs tokens so your embed secret is never exposed to the browser
 - **Multi-user simulation** — switch between mock users to test row-level security
+- **Multiple embed types** — supports both dashboard embeds and portal embeds with separate credentials and permissions
 - **Embed debugger** — inspect the JWT payload and generated iframe URL
 - **HTTPS dev server** — satisfies Holistics CSP requirements for framing
 
@@ -29,8 +30,13 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
+# Dashboard embed credentials
 HOLISTICS_EMBED_KEY=your_embed_key_here
 HOLISTICS_EMBED_SECRET=your_embed_secret_here
+
+# Portal embed credentials
+HOLISTICS_PORTAL_EMBED_KEY=your_portal_embed_key_here
+HOLISTICS_PORTAL_EMBED_SECRET=your_portal_embed_secret_here
 ```
 
 ### 3. Start the backend server

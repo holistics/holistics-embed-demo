@@ -23,11 +23,17 @@ const Icons = {
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  Layout: (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><line x1="3" x2="21" y1="9" y2="9" /><line x1="9" x2="9" y1="21" y2="9" />
+    </svg>
+  ),
 };
 
 // --- Portals ---
 const PORTALS = [
-  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart" },
+  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart", endpoint: "/api/embed-token" },
+  { id: "ecommerce_portal", title: "Ecommerce Portal", icon: "Layout", endpoint: "/api/portal-embed-token" },
 ];
 
 const USERS = [
@@ -44,14 +50,14 @@ export default function App() {
   const [error, setError] = useState(null);
   const [isDevMode, setIsDevMode] = useState(false);
 
-  const fetchEmbedUrl = useCallback(async (portalId, user) => {
+  const fetchEmbedUrl = useCallback(async (portal, user) => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch("http://localhost:3001/api/embed-token", {
+      const res = await fetch(`http://localhost:3001${portal.endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portal: portalId, user }),
+        body: JSON.stringify({ portal: portal.id, user }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -65,7 +71,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchEmbedUrl(activePortal.id, activeUser);
+    fetchEmbedUrl(activePortal, activeUser);
   }, [activePortal, activeUser, fetchEmbedUrl]);
 
   return (
