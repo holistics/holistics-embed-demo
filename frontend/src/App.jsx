@@ -23,12 +23,20 @@ const Icons = {
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
     </svg>
   ),
+  Link: (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
 };
 
 export default function App() {
   const [portals, setPortals] = useState([]);
   const [users, setUsers] = useState([]);
-  const [activePage, setActivePage] = useState("portal"); // "portal" | "users"
+  const [activePage, setActivePage] = useState("portal"); // "portal" | "users" | "custom"
+  const [customEmbedUrl, setCustomEmbedUrl] = useState("");
+  const [customEmbedLoaded, setCustomEmbedLoaded] = useState("");
   const [activePortal, setActivePortal] = useState(null);
   const [activeUser, setActiveUser] = useState(null);
 
@@ -112,6 +120,16 @@ export default function App() {
             <Icons.User className="w-5 h-5 shrink-0" />
             {!isSidebarCollapsed && "Users Reference"}
           </button>
+          <button
+            onClick={() => setActivePage("custom")}
+            title={isSidebarCollapsed ? "Custom Embed" : undefined}
+            className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
+              activePage === "custom" ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <Icons.Link className="w-5 h-5 shrink-0" />
+            {!isSidebarCollapsed && "Custom Embed"}
+          </button>
         </nav>
 
         <div className="p-4 border-t border-slate-700 space-y-2">
@@ -137,7 +155,7 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "Users Reference" : activePortal?.title}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : activePortal?.title}</h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500">Viewing as:</span>
@@ -159,7 +177,67 @@ export default function App() {
 
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 p-6 overflow-auto bg-slate-50 relative">
-            {activePage === "users" ? (
+            {activePage === "custom" ? (
+              <div className="max-w-6xl mx-auto h-full flex flex-col gap-4">
+                <div className="flex gap-2 items-start">
+                  <textarea
+                    value={customEmbedUrl}
+                    onChange={(e) => setCustomEmbedUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim()))}
+                    placeholder="Paste any embed URL here..."
+                    rows={2}
+                    className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#259B6C] focus:ring focus:ring-[#259B6C] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
+                  />
+                  <button
+                    onClick={() => customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim())}
+                    className="px-5 py-2 bg-[#259B6C] text-white text-sm font-medium rounded-md hover:bg-[#1e7d57] transition-colors"
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => { if (customEmbedLoaded) { navigator.clipboard.writeText(customEmbedLoaded); } }}
+                    disabled={!customEmbedLoaded}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => { setCustomEmbedUrl(""); setCustomEmbedLoaded(""); }}
+                    disabled={!customEmbedUrl && !customEmbedLoaded}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 flex-1 overflow-hidden relative flex flex-col">
+                  <div className="h-10 bg-slate-100 border-b border-slate-200 flex items-center px-4 gap-2">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                      <div className="w-3 h-3 rounded-full bg-amber-400"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                    </div>
+                    <div className="mx-auto bg-white border border-slate-200 text-slate-400 text-xs py-1 px-4 flex-1 max-w-md text-center rounded overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+                      {customEmbedLoaded || "No URL loaded"}
+                    </div>
+                  </div>
+                  <div className="flex-1 relative bg-slate-50">
+                    {customEmbedLoaded ? (
+                      <iframe
+                        key={customEmbedLoaded}
+                        src={customEmbedLoaded}
+                        className="w-full h-full border-0"
+                        title="Custom Embedded Content"
+                        allow="clipboard-read; clipboard-write"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">
+                        Paste an embed URL above and click Load
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : activePage === "users" ? (
               <div className="max-w-4xl mx-auto">
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
                   <thead>
