@@ -2,15 +2,9 @@
 
 A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
 
+**Live URL**: https://holistics-embed-demo.pages.dev
+
 ![](./holistics-embed-demo.png)
-
-## Features
-
-- **Secure JWT signing** — backend signs tokens so your embed secret is never exposed to the browser
-- **Multi-user simulation** — switch between mock users to test row-level security
-- **Multiple embed types** — supports both dashboard embeds and portal embeds with separate credentials and permissions
-- **Embed debugger** — inspect the JWT payload and generated iframe URL
-- **HTTPS dev server** — satisfies Holistics CSP requirements for framing
 
 ## Tech Stack
 
@@ -100,5 +94,3 @@ echo -n 'your_key' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
 echo -n 'your_secret' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
   wrangler pages secret put HOLISTICS_EMBED_SECRET --project-name holistics-embed-demo
 ```
-
-> **Note**: Use `echo -n` to avoid trailing newlines which will break JWT signature verification.
