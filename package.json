@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "server": "node server.js",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "vite --config frontend/vite.config.js",
+    "server": "node backend/server.js",
+    "build": "vite build --config frontend/vite.config.js",
+    "lint": "eslint --config frontend/eslint.config.js frontend/",
+    "preview": "vite preview --config frontend/vite.config.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
