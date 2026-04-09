@@ -16,6 +16,25 @@ A demo app showing how to securely embed [Holistics](https://www.holistics.io/) 
 
 - **Frontend**: React, Vite, Tailwind CSS
 - **Backend**: Node.js, Express, `jsonwebtoken`
+- **Deployment**: Cloudflare Pages + Pages Functions
+
+## Project Structure
+
+```
+├── backend/
+│   └── server.js            # Express API server (local dev)
+├── frontend/
+│   ├── functions/api/        # Cloudflare Pages Functions (production)
+│   ├── src/                  # React app source
+│   ├── public/               # Static assets
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   └── eslint.config.js
+├── functions/                # Cloudflare Pages Functions (deploy copy)
+└── package.json
+```
 
 ## Getting Started
 
@@ -30,13 +49,8 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
-# Dashboard embed credentials
 HOLISTICS_EMBED_KEY=your_embed_key_here
 HOLISTICS_EMBED_SECRET=your_embed_secret_here
-
-# Portal embed credentials
-HOLISTICS_PORTAL_EMBED_KEY=your_portal_embed_key_here
-HOLISTICS_PORTAL_EMBED_SECRET=your_portal_embed_secret_here
 ```
 
 ### 3. Start the backend server
@@ -54,3 +68,37 @@ npm run dev
 ```
 
 Open <https://localhost:5173> in your browser. Accept the self-signed certificate warning.
+
+## Deployment (Cloudflare Pages)
+
+The app is deployed to Cloudflare Pages with serverless functions handling the API.
+
+**Live URL**: https://holistics-embed-demo.pages.dev
+
+### Deploy manually
+
+```bash
+# Build the frontend
+npm run build
+
+# Copy functions to root (Cloudflare expects functions/ as sibling to output dir)
+cp -r frontend/functions functions
+
+# Deploy
+CLOUDFLARE_ACCOUNT_ID=<your_account_id> wrangler pages deploy dist \
+  --project-name holistics-embed-demo \
+  --branch main \
+  --commit-dirty=true
+```
+
+### Set secrets
+
+```bash
+echo -n 'your_key' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
+  wrangler pages secret put HOLISTICS_EMBED_KEY --project-name holistics-embed-demo
+
+echo -n 'your_secret' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
+  wrangler pages secret put HOLISTICS_EMBED_SECRET --project-name holistics-embed-demo
+```
+
+> **Note**: Use `echo -n` to avoid trailing newlines which will break JWT signature verification.
