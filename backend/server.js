@@ -26,6 +26,7 @@ app.get("/api/config", (req, res) => {
 app.post("/api/embed-token", (req, res) => {
   const { user, data_source } = req.body;
 
+  // customize your embed payload here
   const payload = {
     embed_user_id: user?.id,
     embed_user_email: user?.email,
