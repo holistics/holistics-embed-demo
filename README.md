@@ -66,5 +66,7 @@ Open <https://localhost:5173> in your browser. Accept the self-signed certificat
 
 ## Customization
 
-To use your own backend or customize the embed token payload, replace the handler in [`backend/server.js` line 26](./backend/server.js#L26). This is where the JWT is constructed — adjust the payload fields, user attributes, or settings to match your integration.
+To use your own backend or customize the embed token payload, replace the handler in [`backend/server.js` line 26](./backend/server.js#L26). This is where the JWT is constructed — adjust the payload fields, or settings to match your integration.
+
+Read more in the [Holistics Embedded Analytics docs](https://docs.holistics.io/embedded/single-dashboard/).
 
