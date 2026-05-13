@@ -7,14 +7,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;
+const EMBED_KEY = process.env.HOLISTICS_EMBED_CODE;
 const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET;
-
-const PORTALS = [
-  { id: "hotels_embed_portal", title: "Hotel Analytics", icon: "Activity" },
-  { id: "ask_ai", title: "Ask AI", icon: "Activity", portal: "hotels_embed_portal", urlSuffix: "/ai" },
-  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart" },
-];
+const HOLISTICS_BASE_URL = process.env.HOLISTICS_BASE_URL || "https://demo4.holistics.io";
 
 const USERS = [
   { id: "user_1", name: "Alice Johnson", email: "alice.johnson@acmehospitality.com", dataSource: "customer_acme" },
@@ -25,19 +20,13 @@ const USERS = [
 ];
 
 app.get("/api/config", (req, res) => {
-  res.json({ portals: PORTALS, users: USERS });
+  res.json({ users: USERS });
 });
 
 app.post("/api/embed-token", (req, res) => {
-  const { portal, user, data_source, url_suffix } = req.body;
-
-  if (!portal) {
-    return res.status(400).json({ error: "portal is required" });
-  }
+  const { user, data_source } = req.body;
 
   const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
     embed_user_id: user?.id,
     embed_user_email: user?.email,
     settings: {
@@ -59,7 +48,7 @@ app.post("/api/embed-token", (req, res) => {
   };
 
   const token = jwt.sign(payload, EMBED_SECRET, { algorithm: "HS256" });
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const embedUrl = `${HOLISTICS_BASE_URL}/embed/${EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
 
   res.json({ embedUrl });
 });

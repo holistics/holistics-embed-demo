@@ -32,18 +32,13 @@ async function signJwt(payload, secret) {
 }
 
 export async function onRequestPost(context) {
-  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
+  const EMBED_KEY = context.env.HOLISTICS_EMBED_CODE;
   const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
+  const HOLISTICS_BASE_URL = context.env.HOLISTICS_BASE_URL || "https://demo4.holistics.io";
 
-  const { portal, user, data_source, url_suffix } = await context.request.json();
-
-  if (!portal) {
-    return Response.json({ error: "portal is required" }, { status: 400 });
-  }
+  const { user, data_source } = await context.request.json();
 
   const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
     embed_user_id: user?.id,
     embed_user_email: user?.email,
     settings: {
@@ -53,9 +48,6 @@ export async function onRequestPost(context) {
       allow_data_subscribe: true,
     },
     user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
       ...(data_source && { data_source: [data_source] }),
     },
     permissions: {
@@ -66,7 +58,7 @@ export async function onRequestPost(context) {
   };
 
   const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const embedUrl = `${HOLISTICS_BASE_URL}/embed/${EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
 
   return Response.json({ embedUrl });
 }

@@ -1,9 +1,3 @@
-const PORTALS = [
-  { id: "hotels_embed_portal", title: "Hotel Analytics", icon: "Activity" },
-  { id: "ask_ai", title: "Ask AI", icon: "Activity", portal: "hotels_embed_portal", urlSuffix: "/ai" },
-  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart" },
-];
-
 const USERS = [
   { id: "user_1", name: "Alice Johnson", email: "alice.johnson@acmehospitality.com", dataSource: "customer_acme" },
   { id: "user_2", name: "Erik Lindgren", email: "erik.lindgren@acmehospitality.com", dataSource: "customer_acme" },
@@ -13,5 +7,5 @@ const USERS = [
 ];
 
 export async function onRequestGet() {
-  return Response.json({ portals: PORTALS, users: USERS });
+  return Response.json({ users: USERS });
 }

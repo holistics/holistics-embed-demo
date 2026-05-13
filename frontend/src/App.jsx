@@ -32,12 +32,10 @@ const Icons = {
 };
 
 export default function App() {
-  const [portals, setPortals] = useState([]);
   const [users, setUsers] = useState([]);
-  const [activePage, setActivePage] = useState("portal"); // "portal" | "users" | "custom"
+  const [activePage, setActivePage] = useState("embed"); // "embed" | "users" | "custom"
   const [customEmbedUrl, setCustomEmbedUrl] = useState("");
   const [customEmbedLoaded, setCustomEmbedLoaded] = useState("");
-  const [activePortal, setActivePortal] = useState(null);
   const [activeUser, setActiveUser] = useState(null);
 
   const [embedUrl, setEmbedUrl] = useState(null);
@@ -50,21 +48,19 @@ export default function App() {
     fetch("/api/config")
       .then((res) => res.json())
       .then((data) => {
-        setPortals(data.portals);
         setUsers(data.users);
-        setActivePortal(data.portals[0]);
         setActiveUser(data.users[0]);
       });
   }, []);
 
-  const fetchEmbedUrl = useCallback(async (portal, user) => {
+  const fetchEmbedUrl = useCallback(async (user) => {
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/embed-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portal: portal.portal || portal.id, user, data_source: user.dataSource, url_suffix: portal.urlSuffix }),
+        body: JSON.stringify({ user, data_source: user.dataSource }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -78,8 +74,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (activePortal && activeUser) fetchEmbedUrl(activePortal, activeUser);
-  }, [activePortal, activeUser, fetchEmbedUrl]);
+    if (activeUser) fetchEmbedUrl(activeUser);
+  }, [activeUser, fetchEmbedUrl]);
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
@@ -87,29 +83,20 @@ export default function App() {
       <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#05264C] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3 px-6"}`}>
           <div className="w-8 h-8 rounded bg-[#259B6C] flex items-center justify-center font-bold text-xl shrink-0">H</div>
-          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Embed Portal</span>}
+          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Holistics Embed</span>}
         </div>
 
-        {!isSidebarCollapsed && <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboards</div>}
-
         <nav className={`flex-1 ${isSidebarCollapsed ? "px-2" : "px-3"} space-y-1 mt-2`}>
-          {portals.map((portal) => {
-            const Icon = Icons[portal.icon];
-            const isActive = activePage === "portal" && activePortal?.id === portal.id;
-            return (
-              <button
-                key={portal.id}
-                onClick={() => { setActivePage("portal"); setActivePortal(portal); }}
-                title={isSidebarCollapsed ? portal.title : undefined}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-                  isActive ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!isSidebarCollapsed && portal.title}
-              </button>
-            );
-          })}
+          <button
+            onClick={() => setActivePage("embed")}
+            title={isSidebarCollapsed ? "Embed" : undefined}
+            className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
+              activePage === "embed" ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <Icons.Activity className="w-5 h-5 shrink-0" />
+            {!isSidebarCollapsed && "Embed"}
+          </button>
           <button
             onClick={() => setActivePage("users")}
             title={isSidebarCollapsed ? "Users Reference" : undefined}
@@ -155,7 +142,9 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : activePortal?.title}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">
+            {activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : "Embed"}
+          </h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500">Viewing as:</span>
@@ -322,8 +311,6 @@ export default function App() {
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
                   <pre className="text-slate-300">{JSON.stringify({
-                    object_name: activePortal?.portal || activePortal?.id,
-                    object_type: "EmbedPortal",
                     embed_user_id: activeUser?.id,
                     embed_user_email: activeUser?.email,
                     settings: {
