@@ -31,42 +31,44 @@ async function signJwt(payload, secret) {
   return `${signingInput}.${base64url(signature)}`;
 }
 
+// Single-dashboard embed JWT payload (docs.holistics.io/embedded/single-dashboard).
+// RLS is enforced here (server-signed): scoped users get a row_based rule on
+// project_id_no; the corporate user (no tenant) gets an empty rule set -> all tenants.
+function buildPayload(user) {
+  const row_based = user?.tenant
+    ? [
+        {
+          path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
+          operator: "is",
+          modifier: null,
+          values: [user.tenant],
+        },
+      ]
+    : [];
+
+  return {
+    settings: {
+      allow_dashboard_export: true,
+      allow_raw_data_export: false,
+      hide_header_panel: true,
+      hide_dashboard_filters_controls_panel: false,
+      default_timezone: null,
+      allow_dashboard_timezone_change: false,
+    },
+    permissions: { row_based },
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+}
+
 export async function onRequestPost(context) {
   const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
   const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
 
-  const { portal, user, data_source, url_suffix } = await context.request.json();
+  const { user } = await context.request.json();
 
-  if (!portal) {
-    return Response.json({ error: "portal is required" }, { status: 400 });
-  }
-
-  const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
-    settings: {
-      ai: { enabled: true },
-      allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
-    },
-    user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
-      ...(data_source && { data_source: [data_source] }),
-    },
-    permissions: {
-      enable_personal_workspace: true,
-    },
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
-
-  const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const token = await signJwt(buildPayload(user), EMBED_SECRET);
+  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}?_token=${token}`;
 
   return Response.json({ embedUrl });
 }
