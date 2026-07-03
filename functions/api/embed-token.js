@@ -31,10 +31,15 @@ async function signJwt(payload, secret) {
   return `${signingInput}.${base64url(signature)}`;
 }
 
-// Single-dashboard embed JWT payload (docs.holistics.io/embedded/single-dashboard).
-// RLS is enforced here (server-signed): scoped users get a row_based rule on
-// project_id_no; the corporate user (no tenant) gets an empty rule set -> all tenants.
-function buildPayload(user) {
+// kind: 'dashboard' -> single-dashboard embed (row_based RLS)
+// kind: 'portal'    -> embed portal (all-tenants explore + AI)
+const PORTALS = [
+  { id: "shelfoptix_osa", kind: "dashboard" },
+  { id: "shelfoptix_portal", kind: "portal" },
+];
+
+// Single-dashboard embed payload: RLS via server-signed row_based on project_id_no.
+function buildDashboardPayload(user) {
   const row_based = user?.tenant
     ? [
         {
@@ -61,14 +66,36 @@ function buildPayload(user) {
   };
 }
 
+// Embed portal payload: internal all-tenants explore + AI (no row-level restriction).
+function buildPortalPayload(portalId, user) {
+  return {
+    object_name: portalId,
+    object_type: "EmbedPortal",
+    embed_user_id: user?.id,
+    embed_user_email: user?.email,
+    settings: {
+      ai: { enabled: true },
+      allow_dashboard_export: true,
+      allow_raw_data_export: true,
+      allow_data_subscribe: true,
+    },
+    permissions: { enable_personal_workspace: true },
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+}
+
 export async function onRequestPost(context) {
-  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
-  const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
+  const { portal, user } = await context.request.json();
+  const def = PORTALS.find((p) => p.id === portal) || PORTALS[0];
 
-  const { user } = await context.request.json();
+  if (def.kind === "portal") {
+    const token = await signJwt(buildPortalPayload(def.id, user), context.env.HOLISTICS_PORTAL_EMBED_SECRET);
+    const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=expanded`;
+    return Response.json({ embedUrl });
+  }
 
-  const token = await signJwt(buildPayload(user), EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}?_token=${token}`;
-
+  const token = await signJwt(buildDashboardPayload(user), context.env.HOLISTICS_EMBED_SECRET);
+  const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_EMBED_KEY}?_token=${token}`;
   return Response.json({ embedUrl });
 }

@@ -7,15 +7,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;      // ShelfOptix dashboard embed_code
-const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET; // ShelfOptix dashboard embed secret
+// Single-dashboard embed (customer-facing, tenant-scoped)
+const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;
+const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET;
+// Embed portal (internal explore + Ask AI, all tenants)
+const PORTAL_EMBED_KEY = process.env.HOLISTICS_PORTAL_EMBED_KEY;
+const PORTAL_EMBED_SECRET = process.env.HOLISTICS_PORTAL_EMBED_SECRET;
 
-// Single ShelfOptix dashboard (the embed_code lives in EMBED_KEY).
+// kind: 'dashboard' -> single-dashboard embed (row_based RLS)
+// kind: 'portal'    -> embed portal (all-tenants explore + AI)
 const PORTALS = [
-  { id: "shelfoptix_osa", title: "OSA / OOS Command Center", icon: "Activity" },
+  { id: "shelfoptix_osa",    title: "OSA / OOS Command Center", icon: "Activity",     kind: "dashboard" },
+  { id: "shelfoptix_portal", title: "Explore & Ask AI",         icon: "ShoppingCart", kind: "portal" },
 ];
 
-// Tenant switcher. `tenant` = project_id_no filtered via row_based.
+// Tenant switcher. `tenant` = project_id_no filtered via row_based (dashboard embed only).
 // null tenant = ShelfOptix corporate / all-tenants (unrestricted).
 const USERS = [
   { id: "corp",        name: "ShelfOptix Corporate",  email: "analytics@shelfoptix.com",  tenant: null,  scope: "All tenants" },
@@ -24,10 +30,8 @@ const USERS = [
   { id: "pureharvest", name: "PureHarvest Brands",    email: "analytics@pureharvest.com", tenant: "103", scope: "Tenant 103" },
 ];
 
-// Single-dashboard embed JWT payload (see docs.holistics.io/embedded/single-dashboard).
-// RLS is enforced here (server-signed): scoped users get a row_based rule on
-// project_id_no; the corporate user gets an empty rule set (sees all tenants).
-function buildPayload(user) {
+// Single-dashboard embed payload: RLS via server-signed row_based on project_id_no.
+function buildDashboardPayload(user) {
   const row_based = user?.tenant
     ? [
         {
@@ -54,13 +58,40 @@ function buildPayload(user) {
   };
 }
 
+// Embed portal payload: internal all-tenants explore + AI (no row-level restriction).
+function buildPortalPayload(portalId, user) {
+  return {
+    object_name: portalId,
+    object_type: "EmbedPortal",
+    embed_user_id: user?.id,
+    embed_user_email: user?.email,
+    settings: {
+      ai: { enabled: true },
+      allow_dashboard_export: true,
+      allow_raw_data_export: true,
+      allow_data_subscribe: true,
+    },
+    permissions: { enable_personal_workspace: true },
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+}
+
 app.get("/api/config", (req, res) => {
   res.json({ portals: PORTALS, users: USERS });
 });
 
 app.post("/api/embed-token", (req, res) => {
-  const { user } = req.body;
-  const token = jwt.sign(buildPayload(user), EMBED_SECRET, { algorithm: "HS256" });
+  const { portal, user } = req.body;
+  const def = PORTALS.find((p) => p.id === portal) || PORTALS[0];
+
+  if (def.kind === "portal") {
+    const token = jwt.sign(buildPortalPayload(def.id, user), PORTAL_EMBED_SECRET, { algorithm: "HS256" });
+    const embedUrl = `https://demo4.holistics.io/embed/${PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=expanded`;
+    return res.json({ embedUrl });
+  }
+
+  const token = jwt.sign(buildDashboardPayload(user), EMBED_SECRET, { algorithm: "HS256" });
   const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}?_token=${token}`;
   res.json({ embedUrl });
 });

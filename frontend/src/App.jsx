@@ -321,24 +321,36 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
-                  <pre className="text-slate-300">{JSON.stringify({
-                    settings: {
-                      allow_dashboard_export: true,
-                      allow_raw_data_export: false,
-                      hide_header_panel: true,
-                      hide_dashboard_filters_controls_panel: false,
-                    },
-                    permissions: {
-                      row_based: activeUser?.tenant
-                        ? [{
-                            path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
-                            operator: "is",
-                            values: [activeUser.tenant],
-                          }]
-                        : [],
-                    },
-                    exp: "Math.floor(Date.now() / 1000) + 3600",
-                  }, null, 2)}</pre>
+                  <pre className="text-slate-300">{JSON.stringify(
+                    activePortal?.kind === "portal"
+                      ? {
+                          object_name: activePortal?.id,
+                          object_type: "EmbedPortal",
+                          embed_user_id: activeUser?.id,
+                          embed_user_email: activeUser?.email,
+                          settings: { ai: { enabled: true }, allow_dashboard_export: true, allow_raw_data_export: true },
+                          permissions: { enable_personal_workspace: true },
+                          exp: "Math.floor(Date.now() / 1000) + 3600",
+                        }
+                      : {
+                          settings: {
+                            allow_dashboard_export: true,
+                            allow_raw_data_export: false,
+                            hide_header_panel: true,
+                            hide_dashboard_filters_controls_panel: false,
+                          },
+                          permissions: {
+                            row_based: activeUser?.tenant
+                              ? [{
+                                  path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
+                                  operator: "is",
+                                  values: [activeUser.tenant],
+                                }]
+                              : [],
+                          },
+                          exp: "Math.floor(Date.now() / 1000) + 3600",
+                        },
+                    null, 2)}</pre>
                 </div>
               </div>
             </aside>
