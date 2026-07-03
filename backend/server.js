@@ -65,14 +65,17 @@ function buildPortalPayload(portalId, user) {
     object_type: "EmbedPortal",
     embed_user_id: user?.id,
     embed_user_email: user?.email,
+    user_attributes: {},
+    permissions: {},
     settings: {
       ai: { enabled: true },
       allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
+      allow_raw_data_export: false,
+      default_timezone: null,
+      allow_dashboard_timezone_change: false,
+      hide_dashboard_filters_controls_panel: false,
+      dashboard_autorun_on_changes: false,
     },
-    permissions: { enable_personal_workspace: true },
-    iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 }
