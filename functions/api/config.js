@@ -1,8 +1,8 @@
 // kind: 'dashboard' -> single-dashboard embed (row_based RLS)
 // kind: 'portal'    -> embed portal (all-tenants explore + AI)
 const PORTALS = [
-  { id: "shelfoptix_osa",    title: "OSA / OOS Command Center", icon: "Activity",     kind: "dashboard" },
-  { id: "shelfoptix_portal", title: "Explore & Ask AI",         icon: "ShoppingCart", kind: "portal" },
+  { id: "shelfoptix_osa",    title: "Single Dashboard", icon: "Activity",     kind: "dashboard" },
+  { id: "shelfoptix_portal", title: "Embed Portal",     icon: "ShoppingCart", kind: "portal" },
 ];
 
 // Tenant switcher. `tenant` = project_id_no filtered via row_based (dashboard embed only).
