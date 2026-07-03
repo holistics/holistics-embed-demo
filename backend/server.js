@@ -90,7 +90,7 @@ app.post("/api/embed-token", (req, res) => {
 
   if (def.kind === "portal") {
     const token = jwt.sign(buildPortalPayload(def.id, user), PORTAL_EMBED_SECRET, { algorithm: "HS256" });
-    const embedUrl = `https://demo4.holistics.io/embed/${PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=expanded`;
+    const embedUrl = `https://demo4.holistics.io/embed/${PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
     return res.json({ embedUrl });
   }
 

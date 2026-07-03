@@ -94,7 +94,7 @@ export async function onRequestPost(context) {
 
   if (def.kind === "portal") {
     const token = await signJwt(buildPortalPayload(def.id, user), context.env.HOLISTICS_PORTAL_EMBED_SECRET);
-    const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=expanded`;
+    const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
     return Response.json({ embedUrl });
   }
 

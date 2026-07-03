@@ -63,7 +63,7 @@ export const handler = async (event) => {
 
   if (def.kind === "portal") {
     const token = jwt.sign(buildPortalPayload(def.id, user), process.env.HOLISTICS_PORTAL_EMBED_SECRET, { algorithm: "HS256" });
-    const embedUrl = `https://demo4.holistics.io/embed/${process.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=expanded`;
+    const embedUrl = `https://demo4.holistics.io/embed/${process.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
     return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ embedUrl }) };
   }
 
