@@ -245,7 +245,7 @@ export default function App() {
                       <th className="px-6 py-3 font-semibold">Name</th>
                       <th className="px-6 py-3 font-semibold">User ID</th>
                       <th className="px-6 py-3 font-semibold">Email</th>
-                      <th className="px-6 py-3 font-semibold">Data Source</th>
+                      <th className="px-6 py-3 font-semibold">Scope</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -256,10 +256,8 @@ export default function App() {
                         <td className="px-6 py-3">{user.email}</td>
                         <td className="px-6 py-3">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            user.dataSource === "customer_acme" ? "bg-blue-100 text-blue-700" :
-                            user.dataSource === "customer_globex" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-purple-100 text-purple-700"
-                          }`}>{user.dataSource}</span>
+                            user.tenant ? "bg-slate-100 text-slate-700" : "bg-red-100 text-red-700"
+                          }`}>{user.scope}</span>
                         </td>
                       </tr>
                     ))}
