@@ -86,7 +86,7 @@ export default function App() {
       {/* Sidebar */}
       <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#070d18] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3 px-6"}`}>
-          <img src="https://media.holistics.io/shelfoptix-icon.png" alt="ShelfOptix" className="w-8 h-8 rounded object-contain shrink-0 bg-white p-0.5" />
+          <img src="https://storage.googleapis.com/shelfoptix_logos/apple-touch-icon.png" alt="ShelfOptix" className="w-8 h-8 rounded object-cover shrink-0" />
           {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide" style={{ fontFamily: "Barlow, sans-serif" }}>ShelfOptix Analytics</span>}
         </div>
 
