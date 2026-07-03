@@ -84,10 +84,10 @@ export default function App() {
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#1E2A38] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
+      <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#070d18] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3 px-6"}`}>
-          <div className="w-8 h-8 rounded bg-[#E11B22] flex items-center justify-center font-bold text-xl shrink-0">S</div>
-          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">ShelfOptix Analytics</span>}
+          <img src="https://media.holistics.io/shelfoptix-icon.png" alt="ShelfOptix" className="w-8 h-8 rounded object-contain shrink-0 bg-white p-0.5" />
+          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide" style={{ fontFamily: "Barlow, sans-serif" }}>ShelfOptix Analytics</span>}
         </div>
 
         {!isSidebarCollapsed && <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboards</div>}
@@ -102,7 +102,7 @@ export default function App() {
                 onClick={() => { setActivePage("portal"); setActivePortal(portal); }}
                 title={isSidebarCollapsed ? portal.title : undefined}
                 className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-                  isActive ? "bg-[#E11B22] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  isActive ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
                 <Icon className="w-5 h-5 shrink-0" />
@@ -114,7 +114,7 @@ export default function App() {
             onClick={() => setActivePage("users")}
             title={isSidebarCollapsed ? "Users Reference" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "users" ? "bg-[#E11B22] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              activePage === "users" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Icons.User className="w-5 h-5 shrink-0" />
@@ -124,7 +124,7 @@ export default function App() {
             onClick={() => setActivePage("custom")}
             title={isSidebarCollapsed ? "Custom Embed" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "custom" ? "bg-[#E11B22] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              activePage === "custom" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Icons.Link className="w-5 h-5 shrink-0" />
@@ -162,7 +162,7 @@ export default function App() {
               <select
                 value={activeUser?.id || ""}
                 onChange={(e) => setActiveUser(users.find((u) => u.id === e.target.value))}
-                className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#E11B22] focus:ring focus:ring-[#E11B22] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
+                className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
               >
                 {users.map((user) => (
                   <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
@@ -186,11 +186,11 @@ export default function App() {
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim()))}
                     placeholder="Paste any embed URL here..."
                     rows={2}
-                    className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#E11B22] focus:ring focus:ring-[#E11B22] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
+                    className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
                   />
                   <button
                     onClick={() => customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim())}
-                    className="px-5 py-2 bg-[#E11B22] text-white text-sm font-medium rounded-md hover:bg-[#B3141A] transition-colors"
+                    className="px-5 py-2 bg-[#E63946] text-white text-sm font-medium rounded-md hover:bg-[#d62839] transition-colors"
                   >
                     Load
                   </button>
@@ -241,7 +241,7 @@ export default function App() {
               <div className="max-w-4xl mx-auto">
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
                   <thead>
-                    <tr className="bg-[#1E2A38] text-white text-left">
+                    <tr className="bg-[#070d18] text-white text-left">
                       <th className="px-6 py-3 font-semibold">Name</th>
                       <th className="px-6 py-3 font-semibold">User ID</th>
                       <th className="px-6 py-3 font-semibold">Email</th>
@@ -283,7 +283,7 @@ export default function App() {
                   <div className="flex-1 relative bg-slate-50">
                     {isLoading && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
-                        <div className="w-8 h-8 border-4 border-[#E11B22] border-t-transparent rounded-full animate-spin"></div>
+                        <div className="w-8 h-8 border-4 border-[#E63946] border-t-transparent rounded-full animate-spin"></div>
                         <span className="mt-4 text-sm font-medium text-slate-600">Loading Holistics Data...</span>
                       </div>
                     )}
@@ -312,7 +312,7 @@ export default function App() {
             <aside className="w-[420px] bg-[#0a192f] text-slate-300 border-l border-slate-800 flex flex-col z-20 shadow-2xl">
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-[#051024]">
                 <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Icons.Code className="w-4 h-4 text-[#E11B22]" />
+                  <Icons.Code className="w-4 h-4 text-[#E63946]" />
                   JWT Payload
                 </h3>
                 <button onClick={() => setIsDevMode(false)} className="text-slate-500 hover:text-white">×</button>
