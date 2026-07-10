@@ -326,7 +326,7 @@ export default function App() {
                           object_type: "EmbedPortal",
                           embed_user_id: activeUser?.id,
                           embed_user_email: activeUser?.email,
-                          user_attributes: {},
+                          user_attributes: { project_id_no: activeUser?.tenant ? [activeUser.tenant] : "__ALL__" },
                           permissions: {},
                           settings: { ai: { enabled: true }, allow_dashboard_export: true, allow_raw_data_export: false },
                           exp: "Math.floor(Date.now() / 1000) + 3600",

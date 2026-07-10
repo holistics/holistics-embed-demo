@@ -58,14 +58,16 @@ function buildDashboardPayload(user) {
   };
 }
 
-// Embed portal payload: internal all-tenants explore + AI (no row-level restriction).
+// Embed portal payload: tenant-scoped explore + AI. RLS is enforced by the dataset's
+// `matches_user_attribute` permission on project_id_no, fed by the user_attributes below.
+// Corporate/all-tenants user (no tenant) sends `__ALL__` to bypass the row filter.
 function buildPortalPayload(portalId, user) {
   return {
     object_name: portalId,
     object_type: "EmbedPortal",
     embed_user_id: user?.id,
     embed_user_email: user?.email,
-    user_attributes: {},
+    user_attributes: { project_id_no: user?.tenant ? [user.tenant] : "__ALL__" },
     permissions: {},
     settings: {
       ai: { enabled: true },
