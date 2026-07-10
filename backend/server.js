@@ -67,7 +67,7 @@ function buildPortalPayload(portalId, user) {
     object_type: "EmbedPortal",
     embed_user_id: user?.id,
     embed_user_email: user?.email,
-    user_attributes: { project_id_no: user?.tenant ? [user.tenant] : "__ALL__" },
+    user_attributes: { project_id_no: user?.tenant ? [Number(user.tenant)] : "__ALL__" },
     permissions: {},
     settings: {
       ai: { enabled: true },
