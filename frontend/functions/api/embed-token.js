@@ -31,51 +31,45 @@ async function signJwt(payload, secret) {
   return `${signingInput}.${base64url(signature)}`;
 }
 
-// kind: 'dashboard' -> single-dashboard embed (row_based RLS)
-// kind: 'portal'    -> embed portal (all-tenants explore + AI)
-const PORTALS = [
-  { id: "shelfoptix_osa", kind: "dashboard" },
-  { id: "shelfoptix_portal", kind: "portal" },
+// Personas — must mirror backend/server.js.
+const USERS = [
+  { id: "cascade",     type: "retailer",     name: "Cascade Foods Co.",   email: "analytics@cascadefoods.com", schema: "shelfoptix_retailer_101" },
+  { id: "marketfresh", type: "retailer",     name: "MarketFresh Grocery", email: "insights@marketfresh.com",   schema: "shelfoptix_retailer_102" },
+  { id: "pureharvest", type: "retailer",     name: "PureHarvest Brands",  email: "analytics@pureharvest.com",  schema: "shelfoptix_retailer_103" },
+  { id: "pg",          type: "manufacturer", name: "Procter & Gamble",    email: "analytics@pg.com",           manufacturer_id: 1 },
+  { id: "unilever",    type: "manufacturer", name: "Unilever",            email: "analytics@unilever.com",     manufacturer_id: 2 },
+  { id: "nestle",      type: "manufacturer", name: "Nestlé",              email: "analytics@nestle.com",       manufacturer_id: 3 },
+  { id: "pepsico",     type: "manufacturer", name: "PepsiCo",             email: "analytics@pepsico.com",      manufacturer_id: 4 },
 ];
 
-// Single-dashboard embed payload: RLS via server-signed row_based on project_id_no.
-function buildDashboardPayload(user) {
-  const row_based = user?.tenant
-    ? [
-        {
-          path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
-          operator: "is",
-          modifier: null,
-          values: [user.tenant],
-        },
-      ]
-    : [];
-
-  return {
-    settings: {
-      allow_dashboard_export: true,
-      allow_raw_data_export: false,
-      hide_header_panel: true,
-      hide_dashboard_filters_controls_panel: false,
-      default_timezone: null,
-      allow_dashboard_timezone_change: false,
-    },
-    permissions: { row_based },
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
+// Retailer + manufacturer portals are separate embed objects (keeps the union out of
+// retailers' reach). Each has its own key/secret; the token's object_name selects it.
+function portalFor(user, env) {
+  return user.type === "manufacturer"
+    ? {
+        object: "shelfoptix_manufacturer_portal",
+        key: env.HOLISTICS_MANUFACTURER_PORTAL_KEY,
+        secret: env.HOLISTICS_MANUFACTURER_PORTAL_SECRET,
+      }
+    : {
+        object: "shelfoptix_portal",
+        key: env.HOLISTICS_RETAILER_PORTAL_KEY || env.HOLISTICS_PORTAL_EMBED_KEY,
+        secret: env.HOLISTICS_RETAILER_PORTAL_SECRET || env.HOLISTICS_PORTAL_EMBED_SECRET,
+      };
 }
 
-// Embed portal payload: tenant-scoped explore + AI. RLS is enforced by the dataset's
-// `matches_user_attribute` permission on project_id_no, fed by the user_attributes below.
-// Corporate/all-tenants user (no tenant) sends `__ALL__` to bypass the row filter.
-function buildPortalPayload(portalId, user) {
+function buildPortalPayload(user, objectName) {
+  const user_attributes =
+    user.type === "manufacturer"
+      ? { manufacturer_id: [user.manufacturer_id] }
+      : { schema: [user.schema] };
+
   return {
-    object_name: portalId,
+    object_name: objectName,
     object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
-    user_attributes: { project_id_no: user?.tenant ? [Number(user.tenant)] : "__ALL__" },
+    embed_user_id: user.id,
+    embed_user_email: user.email,
+    user_attributes,
     permissions: {},
     settings: {
       ai: { enabled: true },
@@ -85,22 +79,27 @@ function buildPortalPayload(portalId, user) {
       allow_dashboard_timezone_change: false,
       hide_dashboard_filters_controls_panel: false,
       dashboard_autorun_on_changes: false,
+      // Let embedded users force-refresh past the 10-min query cache (near real-time).
+      allow_public_user_bust_cache: true,
     },
+    iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 }
 
 export async function onRequestPost(context) {
-  const { portal, user } = await context.request.json();
-  const def = PORTALS.find((p) => p.id === portal) || PORTALS[0];
+  const { user: userId } = await context.request.json();
+  const user = USERS.find((u) => u.id === userId) || USERS[0];
+  const portal = portalFor(user, context.env);
 
-  if (def.kind === "portal") {
-    const token = await signJwt(buildPortalPayload(def.id, user), context.env.HOLISTICS_PORTAL_EMBED_SECRET);
-    const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
-    return Response.json({ embedUrl });
+  if (!portal.key || !portal.secret) {
+    return Response.json(
+      { error: `Missing embed key/secret for ${user.type} portal.` },
+      { status: 500 },
+    );
   }
 
-  const token = await signJwt(buildDashboardPayload(user), context.env.HOLISTICS_EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${context.env.HOLISTICS_EMBED_KEY}?_token=${token}`;
+  const token = await signJwt(buildPortalPayload(user, portal.object), portal.secret);
+  const embedUrl = `https://demo4.holistics.io/embed/${portal.key}?_token=${token}&left_panel_state=collapsed`;
   return Response.json({ embedUrl });
 }

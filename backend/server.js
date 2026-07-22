@@ -7,67 +7,60 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Single-dashboard embed (customer-facing, tenant-scoped)
-const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;
-const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET;
-// Embed portal (internal explore + Ask AI, all tenants)
-const PORTAL_EMBED_KEY = process.env.HOLISTICS_PORTAL_EMBED_KEY;
-const PORTAL_EMBED_SECRET = process.env.HOLISTICS_PORTAL_EMBED_SECRET;
+// Two embed portals, one per user type — kept SEPARATE so retailers can never reach
+// the cross-retailer union dataset:
+//   • Retailer portal (shelfoptix_portal): dynamic-schema isolation. Token carries a
+//     `schema` user attribute → routes each retailer to its own BigQuery dataset.
+//   • Manufacturer portal (shelfoptix_manufacturer_portal): cross-retailer union +
+//     grants + RLP. Token carries a `manufacturer` user attribute → scopes to that
+//     manufacturer's own products across its assigned retailers.
+//
+// Each portal has its own embed key + secret (from the Holistics UI → embed settings).
+const RETAILER_PORTAL_KEY = process.env.HOLISTICS_RETAILER_PORTAL_KEY || process.env.HOLISTICS_PORTAL_EMBED_KEY;
+const RETAILER_PORTAL_SECRET = process.env.HOLISTICS_RETAILER_PORTAL_SECRET || process.env.HOLISTICS_PORTAL_EMBED_SECRET;
+const MANUFACTURER_PORTAL_KEY = process.env.HOLISTICS_MANUFACTURER_PORTAL_KEY;
+const MANUFACTURER_PORTAL_SECRET = process.env.HOLISTICS_MANUFACTURER_PORTAL_SECRET;
 
-// kind: 'dashboard' -> single-dashboard embed (row_based RLS)
-// kind: 'portal'    -> embed portal (all-tenants explore + AI)
-const PORTALS = [
-  { id: "shelfoptix_osa",    title: "Single Dashboard", icon: "Activity",     kind: "dashboard" },
-  { id: "shelfoptix_portal", title: "Embed Portal",     icon: "ShoppingCart", kind: "portal" },
-];
+const HOLISTICS_HOST = "https://demo4.holistics.io";
 
-// Tenant switcher. `tenant` = project_id_no filtered via row_based (dashboard embed only).
-// null tenant = ShelfOptix corporate / all-tenants (unrestricted).
+// The app decides retailer-vs-manufacturer by the logged-in user's `type`, then picks
+// the portal + the matching user attribute. Holistics does not infer the type.
+//   - retailer     → schema:       BigQuery dataset name (dynamic schema)
+//   - manufacturer → manufacturer: brand/manufacturer value (must match dim_product.brand
+//                                   and the grants table; note "Nestle" has no accent)
 const USERS = [
-  { id: "corp",        name: "ShelfOptix Corporate",  email: "analytics@shelfoptix.com",  tenant: null,  scope: "All tenants" },
-  { id: "cascade",     name: "Cascade Foods Co.",     email: "reports@cascadefoods.com",  tenant: "101", scope: "Tenant 101" },
-  { id: "marketfresh", name: "MarketFresh Grocery",   email: "insights@marketfresh.com",  tenant: "102", scope: "Tenant 102" },
-  { id: "pureharvest", name: "PureHarvest Brands",    email: "analytics@pureharvest.com", tenant: "103", scope: "Tenant 103" },
+  // --- Retailers (each sees only their own dataset) ---
+  { id: "cascade",     type: "retailer",     name: "Cascade Foods Co.",   email: "analytics@cascadefoods.com", schema: "shelfoptix_retailer_101" },
+  { id: "marketfresh", type: "retailer",     name: "MarketFresh Grocery", email: "insights@marketfresh.com",   schema: "shelfoptix_retailer_102" },
+  { id: "pureharvest", type: "retailer",     name: "PureHarvest Brands",  email: "analytics@pureharvest.com",  schema: "shelfoptix_retailer_103" },
+  // --- Manufacturers (each sees its own products across assigned retailers) ---
+  { id: "pg",          type: "manufacturer", name: "Procter & Gamble",    email: "analytics@pg.com",           manufacturer_id: 1 },
+  { id: "unilever",    type: "manufacturer", name: "Unilever",            email: "analytics@unilever.com",     manufacturer_id: 2 },
+  { id: "nestle",      type: "manufacturer", name: "Nestlé",              email: "analytics@nestle.com",       manufacturer_id: 3 },
+  { id: "pepsico",     type: "manufacturer", name: "PepsiCo",             email: "analytics@pepsico.com",      manufacturer_id: 4 },
 ];
 
-// Single-dashboard embed payload: RLS via server-signed row_based on project_id_no.
-function buildDashboardPayload(user) {
-  const row_based = user?.tenant
-    ? [
-        {
-          path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
-          operator: "is",
-          modifier: null,
-          values: [user.tenant],
-        },
-      ]
-    : [];
-
-  return {
-    settings: {
-      allow_dashboard_export: true,
-      allow_raw_data_export: false,
-      hide_header_panel: true,
-      hide_dashboard_filters_controls_panel: false,
-      default_timezone: null,
-      allow_dashboard_timezone_change: false,
-    },
-    permissions: { row_based },
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
+function portalFor(user) {
+  return user.type === "manufacturer"
+    ? { object: "shelfoptix_manufacturer_portal", key: MANUFACTURER_PORTAL_KEY, secret: MANUFACTURER_PORTAL_SECRET }
+    : { object: "shelfoptix_portal",              key: RETAILER_PORTAL_KEY,     secret: RETAILER_PORTAL_SECRET };
 }
 
-// Embed portal payload: tenant-scoped explore + AI. RLS is enforced by the dataset's
-// `matches_user_attribute` permission on project_id_no, fed by the user_attributes below.
-// Corporate/all-tenants user (no tenant) sends `__ALL__` to bypass the row filter.
-function buildPortalPayload(portalId, user) {
+// Embed-portal payload. Row scope comes entirely from the user attribute below,
+// enforced server-side by each dataset (dynamic schema for retailers; RLP + grants
+// for manufacturers). The app only asserts identity.
+function buildPortalPayload(user) {
+  const user_attributes =
+    user.type === "manufacturer"
+      ? { manufacturer_id: [user.manufacturer_id] }
+      : { schema: [user.schema] };
+
   return {
-    object_name: portalId,
+    object_name: portalFor(user).object,
     object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
-    user_attributes: { project_id_no: user?.tenant ? [Number(user.tenant)] : "__ALL__" },
+    embed_user_id: user.id,
+    embed_user_email: user.email,
+    user_attributes,
     permissions: {},
     settings: {
       ai: { enabled: true },
@@ -77,27 +70,32 @@ function buildPortalPayload(portalId, user) {
       allow_dashboard_timezone_change: false,
       hide_dashboard_filters_controls_panel: false,
       dashboard_autorun_on_changes: false,
+      // Let embedded users force-refresh past the 10-min query cache (near real-time).
+      allow_public_user_bust_cache: true,
     },
+    iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 }
 
 app.get("/api/config", (req, res) => {
-  res.json({ portals: PORTALS, users: USERS });
+  // USERS carry no secrets (portal keys/secrets live in env), so it's safe to expose
+  // them for the persona switcher + reference table.
+  res.json({ users: USERS });
 });
 
 app.post("/api/embed-token", (req, res) => {
-  const { portal, user } = req.body;
-  const def = PORTALS.find((p) => p.id === portal) || PORTALS[0];
+  const user = USERS.find((u) => u.id === req.body.user) || USERS[0];
+  const portal = portalFor(user);
 
-  if (def.kind === "portal") {
-    const token = jwt.sign(buildPortalPayload(def.id, user), PORTAL_EMBED_SECRET, { algorithm: "HS256" });
-    const embedUrl = `https://demo4.holistics.io/embed/${PORTAL_EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
-    return res.json({ embedUrl });
+  if (!portal.key || !portal.secret) {
+    return res.status(500).json({
+      error: `Missing embed key/secret for ${user.type} portal. Set the HOLISTICS_${user.type === "manufacturer" ? "MANUFACTURER" : "RETAILER"}_PORTAL_KEY/SECRET env vars.`,
+    });
   }
 
-  const token = jwt.sign(buildDashboardPayload(user), EMBED_SECRET, { algorithm: "HS256" });
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}?_token=${token}`;
+  const token = jwt.sign(buildPortalPayload(user), portal.secret, { algorithm: "HS256" });
+  const embedUrl = `${HOLISTICS_HOST}/embed/${portal.key}?_token=${token}&left_panel_state=collapsed`;
   res.json({ embedUrl });
 });
 

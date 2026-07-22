@@ -2,15 +2,19 @@ import React, { useState, useEffect, useCallback } from "react";
 
 // --- Icons (Inline SVGs for zero dependencies) ---
 const Icons = {
-  ShoppingCart: (props) => (
+  Store: (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" />
-      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+      <path d="M2 7l1.5-4h17L22 7" /><path d="M4 7v13h16V7" /><path d="M2 7h20" /><path d="M9 20v-6h6v6" />
     </svg>
   ),
-  Activity: (props) => (
+  Factory: (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      <path d="M2 20h20" /><path d="M4 20V9l6 4V9l6 4V6l4 2v12" />
+    </svg>
+  ),
+  Grid: (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
     </svg>
   ),
   Code: (props) => (
@@ -31,14 +35,19 @@ const Icons = {
   ),
 };
 
+// What each persona's embed token asserts (for the dev panel + reference table).
+function attrOf(user) {
+  return user?.type === "manufacturer"
+    ? { key: "manufacturer_id", value: user.manufacturer_id, portal: "shelfoptix_manufacturer_portal" }
+    : { key: "schema", value: user?.schema, portal: "shelfoptix_portal" };
+}
+
 export default function App() {
-  const [portals, setPortals] = useState([]);
   const [users, setUsers] = useState([]);
-  const [activePage, setActivePage] = useState("portal"); // "portal" | "users" | "custom"
+  const [activePage, setActivePage] = useState("embed"); // "embed" | "users" | "custom"
+  const [activeUser, setActiveUser] = useState(null);
   const [customEmbedUrl, setCustomEmbedUrl] = useState("");
   const [customEmbedLoaded, setCustomEmbedLoaded] = useState("");
-  const [activePortal, setActivePortal] = useState(null);
-  const [activeUser, setActiveUser] = useState(null);
 
   const [embedUrl, setEmbedUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,21 +59,19 @@ export default function App() {
     fetch("/api/config")
       .then((res) => res.json())
       .then((data) => {
-        setPortals(data.portals);
         setUsers(data.users);
-        setActivePortal(data.portals[0]);
         setActiveUser(data.users[0]);
       });
   }, []);
 
-  const fetchEmbedUrl = useCallback(async (portal, user) => {
+  const fetchEmbedUrl = useCallback(async (user) => {
     setIsLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/embed-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portal: portal.portal || portal.id, user, data_source: user.dataSource, url_suffix: portal.urlSuffix }),
+        body: JSON.stringify({ user: user.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -78,8 +85,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (activePortal && activeUser) fetchEmbedUrl(activePortal, activeUser);
-  }, [activePortal, activeUser, fetchEmbedUrl]);
+    if (activePage === "embed" && activeUser) fetchEmbedUrl(activeUser);
+  }, [activePage, activeUser, fetchEmbedUrl]);
+
+  const retailers = users.filter((u) => u.type === "retailer");
+  const manufacturers = users.filter((u) => u.type === "manufacturer");
+
+  const attr = attrOf(activeUser);
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
@@ -90,46 +102,39 @@ export default function App() {
           {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide" style={{ fontFamily: "Barlow, sans-serif" }}>ShelfOptix Analytics</span>}
         </div>
 
-        {!isSidebarCollapsed && <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboards</div>}
-
-        <nav className={`flex-1 ${isSidebarCollapsed ? "px-2" : "px-3"} space-y-1 mt-2`}>
-          {portals.map((portal) => {
-            const Icon = Icons[portal.icon];
-            const isActive = activePage === "portal" && activePortal?.id === portal.id;
-            return (
-              <button
-                key={portal.id}
-                onClick={() => { setActivePage("portal"); setActivePortal(portal); }}
-                title={isSidebarCollapsed ? portal.title : undefined}
-                className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-                  isActive ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <Icon className="w-5 h-5 shrink-0" />
-                {!isSidebarCollapsed && portal.title}
-              </button>
-            );
-          })}
+        <nav className={`flex-1 ${isSidebarCollapsed ? "px-2" : "px-3"} space-y-1 mt-2 overflow-y-auto`}>
           <button
-            onClick={() => setActivePage("users")}
-            title={isSidebarCollapsed ? "Users Reference" : undefined}
+            onClick={() => setActivePage("embed")}
+            title={isSidebarCollapsed ? "Embedded Dashboard" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "users" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              activePage === "embed" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
-            <Icons.User className="w-5 h-5 shrink-0" />
-            {!isSidebarCollapsed && "Users Reference"}
+            <Icons.Grid className="w-5 h-5 shrink-0" />
+            {!isSidebarCollapsed && "Embedded Dashboard"}
           </button>
-          <button
-            onClick={() => setActivePage("custom")}
-            title={isSidebarCollapsed ? "Custom Embed" : undefined}
-            className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "custom" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-            }`}
-          >
-            <Icons.Link className="w-5 h-5 shrink-0" />
-            {!isSidebarCollapsed && "Custom Embed"}
-          </button>
+          <div className="space-y-1">
+            <button
+              onClick={() => setActivePage("users")}
+              title={isSidebarCollapsed ? "Users Reference" : undefined}
+              className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-md transition-colors text-sm font-medium ${
+                activePage === "users" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Icons.User className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && "Users Reference"}
+            </button>
+            <button
+              onClick={() => setActivePage("custom")}
+              title={isSidebarCollapsed ? "Custom Embed" : undefined}
+              className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-md transition-colors text-sm font-medium ${
+                activePage === "custom" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              }`}
+            >
+              <Icons.Link className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && "Custom Embed"}
+            </button>
+          </div>
         </nav>
 
         <div className="p-4 border-t border-slate-700 space-y-2">
@@ -155,18 +160,28 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : activePortal?.title}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">
+            {activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : `${activeUser?.name || ""}`}
+            {activePage === "embed" && activeUser && (
+              <span className={`ml-3 px-2 py-0.5 rounded text-xs font-medium align-middle ${activeUser.type === "manufacturer" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>
+                {activeUser.type}
+              </span>
+            )}
+          </h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500">Viewing as:</span>
               <select
                 value={activeUser?.id || ""}
-                onChange={(e) => setActiveUser(users.find((u) => u.id === e.target.value))}
-                className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
+                onChange={(e) => { setActivePage("embed"); setActiveUser(users.find((u) => u.id === e.target.value)); }}
+                className="block w-60 rounded-md border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
               >
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
-                ))}
+                <optgroup label="Retailers">
+                  {retailers.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                </optgroup>
+                <optgroup label="Manufacturers">
+                  {manufacturers.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
+                </optgroup>
               </select>
             </div>
             <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
@@ -188,51 +203,15 @@ export default function App() {
                     rows={2}
                     className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
                   />
-                  <button
-                    onClick={() => customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim())}
-                    className="px-5 py-2 bg-[#E63946] text-white text-sm font-medium rounded-md hover:bg-[#d62839] transition-colors"
-                  >
-                    Load
-                  </button>
-                  <button
-                    onClick={() => { if (customEmbedLoaded) { navigator.clipboard.writeText(customEmbedLoaded); } }}
-                    disabled={!customEmbedLoaded}
-                    className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Copy
-                  </button>
-                  <button
-                    onClick={() => { setCustomEmbedUrl(""); setCustomEmbedLoaded(""); }}
-                    disabled={!customEmbedUrl && !customEmbedLoaded}
-                    className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Clear
-                  </button>
+                  <button onClick={() => customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim())} className="px-5 py-2 bg-[#E63946] text-white text-sm font-medium rounded-md hover:bg-[#d62839] transition-colors">Load</button>
+                  <button onClick={() => { setCustomEmbedUrl(""); setCustomEmbedLoaded(""); }} disabled={!customEmbedUrl && !customEmbedLoaded} className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">Clear</button>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 flex-1 overflow-hidden relative flex flex-col">
-                  <div className="h-10 bg-slate-100 border-b border-slate-200 flex items-center px-4 gap-2">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                      <div className="w-3 h-3 rounded-full bg-amber-400"></div>
-                      <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                    </div>
-                    <div className="mx-auto bg-white border border-slate-200 text-slate-400 text-xs py-1 px-4 flex-1 max-w-md text-center rounded overflow-hidden text-ellipsis whitespace-nowrap font-mono">
-                      {customEmbedLoaded || "No URL loaded"}
-                    </div>
-                  </div>
                   <div className="flex-1 relative bg-slate-50">
                     {customEmbedLoaded ? (
-                      <iframe
-                        key={customEmbedLoaded}
-                        src={customEmbedLoaded}
-                        className="w-full h-full border-0"
-                        title="Custom Embedded Content"
-                        allow="clipboard-read; clipboard-write"
-                      />
+                      <iframe key={customEmbedLoaded} src={customEmbedLoaded} className="w-full h-full border-0" title="Custom Embedded Content" allow="clipboard-read; clipboard-write" />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">
-                        Paste an embed URL above and click Load
-                      </div>
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">Paste an embed URL above and click Load</div>
                     )}
                   </div>
                 </div>
@@ -243,31 +222,32 @@ export default function App() {
                   <thead>
                     <tr className="bg-[#070d18] text-white text-left">
                       <th className="px-6 py-3 font-semibold">Name</th>
-                      <th className="px-6 py-3 font-semibold">User ID</th>
-                      <th className="px-6 py-3 font-semibold">Email</th>
-                      <th className="px-6 py-3 font-semibold">Scope</th>
+                      <th className="px-6 py-3 font-semibold">Type</th>
+                      <th className="px-6 py-3 font-semibold">Token attribute</th>
+                      <th className="px-6 py-3 font-semibold">Value</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {users.map((user) => (
-                      <tr key={user.id} className="hover:bg-slate-50">
-                        <td className="px-6 py-3">{user.name}</td>
-                        <td className="px-6 py-3 font-mono text-xs">{user.id}</td>
-                        <td className="px-6 py-3">{user.email}</td>
-                        <td className="px-6 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            user.tenant ? "bg-slate-100 text-slate-700" : "bg-red-100 text-red-700"
-                          }`}>{user.scope}</span>
-                        </td>
-                      </tr>
-                    ))}
+                    {users.map((user) => {
+                      const a = attrOf(user);
+                      return (
+                        <tr key={user.id} className="hover:bg-slate-50">
+                          <td className="px-6 py-3">{user.name}</td>
+                          <td className="px-6 py-3">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.type === "manufacturer" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>{user.type}</span>
+                          </td>
+                          <td className="px-6 py-3 font-mono text-xs">{a.key}</td>
+                          <td className="px-6 py-3 font-mono text-xs">{a.value}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                <p className="text-xs text-slate-400 mt-3">Retailers route to their own BigQuery dataset via <span className="font-mono">schema</span> (dynamic schema). Manufacturers see the cross-retailer union scoped by <span className="font-mono">manufacturer</span> (grants + RLP).</p>
               </div>
             ) : (
               <div className="max-w-6xl mx-auto h-full flex flex-col">
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 flex-1 overflow-hidden relative flex flex-col">
-                  {/* Browser chrome */}
                   <div className="h-10 bg-slate-100 border-b border-slate-200 flex items-center px-4 gap-2">
                     <div className="flex gap-1.5">
                       <div className="w-3 h-3 rounded-full bg-red-400"></div>
@@ -278,8 +258,6 @@ export default function App() {
                       {embedUrl || "Loading..."}
                     </div>
                   </div>
-
-                  {/* Iframe content */}
                   <div className="flex-1 relative bg-slate-50">
                     {isLoading && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
@@ -288,18 +266,12 @@ export default function App() {
                       </div>
                     )}
                     {error && (
-                      <div className="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
-                        Error: {error}. Make sure the backend server is running on port 3001.
+                      <div className="absolute inset-0 flex items-center justify-center text-red-500 text-sm px-6 text-center">
+                        Error: {error}. Make sure the backend is running on port 3001 and the portal keys/secrets are set.
                       </div>
                     )}
                     {embedUrl && (
-                      <iframe
-                        key={embedUrl}
-                        src={embedUrl}
-                        className="w-full h-full border-0"
-                        title="Holistics Embedded Dashboard"
-                        allow="clipboard-read; clipboard-write"
-                      />
+                      <iframe key={embedUrl} src={embedUrl} className="w-full h-full border-0" title="Holistics Embedded Dashboard" allow="clipboard-read; clipboard-write" />
                     )}
                   </div>
                 </div>
@@ -320,35 +292,16 @@ export default function App() {
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
                   <pre className="text-slate-300">{JSON.stringify(
-                    activePortal?.kind === "portal"
-                      ? {
-                          object_name: activePortal?.id,
-                          object_type: "EmbedPortal",
-                          embed_user_id: activeUser?.id,
-                          embed_user_email: activeUser?.email,
-                          user_attributes: { project_id_no: activeUser?.tenant ? [Number(activeUser.tenant)] : "__ALL__" },
-                          permissions: {},
-                          settings: { ai: { enabled: true }, allow_dashboard_export: true, allow_raw_data_export: false },
-                          exp: "Math.floor(Date.now() / 1000) + 3600",
-                        }
-                      : {
-                          settings: {
-                            allow_dashboard_export: true,
-                            allow_raw_data_export: false,
-                            hide_header_panel: true,
-                            hide_dashboard_filters_controls_panel: false,
-                          },
-                          permissions: {
-                            row_based: activeUser?.tenant
-                              ? [{
-                                  path: { dataset: "shelfoptix_osa", model: "shelfoptix_store_scan_sample", field: "project_id_no" },
-                                  operator: "is",
-                                  values: [activeUser.tenant],
-                                }]
-                              : [],
-                          },
-                          exp: "Math.floor(Date.now() / 1000) + 3600",
-                        },
+                    {
+                      object_name: attr.portal,
+                      object_type: "EmbedPortal",
+                      embed_user_id: activeUser?.id,
+                      embed_user_email: activeUser?.email,
+                      user_attributes: { [attr.key]: [attr.value] },
+                      permissions: {},
+                      settings: { ai: { enabled: true }, allow_dashboard_export: true, allow_raw_data_export: false },
+                      exp: "Math.floor(Date.now() / 1000) + 3600",
+                    },
                     null, 2)}</pre>
                 </div>
               </div>
