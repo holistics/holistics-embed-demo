@@ -14,8 +14,8 @@ so a user only ever sees their own site(s)' data, including via Explore and Ask-
 - **Deploy**: Cloudflare Pages + Pages Functions (`functions/api/`)
 
 ## 1. Get your Embed Portal credentials (from Holistics)
-1. In Holistics (**eu.holistics.io**), open the **`mercateam_portal`** Embed Portal.
-2. Open its **Embed** settings → enable embedding.
+1. In Holistics (**eu.holistics.io**), go to `Embedded Analytics,` preview the **`mercateam_portal`** Embed Portal.
+2. View the integration code.
 3. Copy the two values:
    - **Embed Code** → this is the key in the URL (`/embed/<EMBED_CODE>`)
    - **Secret Key** → used to sign the JWT
