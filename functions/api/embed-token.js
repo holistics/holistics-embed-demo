@@ -31,12 +31,20 @@ async function signJwt(payload, secret) {
   return `${signingInput}.${base64url(signature)}`;
 }
 
+// Mercateam Embed Portal token. RLS = row-level, per site: user_attributes.site_id is the
+// array of sites this user may see; each dataset's `site_access` permission clips rows to it.
 export async function onRequestPost(context) {
-  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
-  const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
+  const EMBED_KEY = context.env.HOLISTICS_MERCATEAM_PORTAL_KEY;
+  const EMBED_SECRET = context.env.HOLISTICS_MERCATEAM_PORTAL_SECRET;
 
-  const { portal, user, data_source, url_suffix } = await context.request.json();
+  if (!EMBED_KEY || !EMBED_SECRET) {
+    return Response.json(
+      { error: "Missing HOLISTICS_MERCATEAM_PORTAL_KEY / HOLISTICS_MERCATEAM_PORTAL_SECRET env vars." },
+      { status: 500 },
+    );
+  }
 
+  const { portal, user, url_suffix } = await context.request.json();
   if (!portal) {
     return Response.json({ error: "portal is required" }, { status: 400 });
   }
@@ -49,15 +57,14 @@ export async function onRequestPost(context) {
     settings: {
       ai: { enabled: true },
       allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
+      allow_raw_data_export: false,
     },
+    // Row-level scope: the site(s) this user is allowed to see.
     user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
-      ...(data_source && { data_source: [data_source] }),
+      site_id: user?.site_ids || [],
     },
+    // Let embed users build/save their own dashboards (Personal Creator tier).
+    // Set to false for view-only.
     permissions: {
       enable_personal_workspace: true,
     },
@@ -66,7 +73,7 @@ export async function onRequestPost(context) {
   };
 
   const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const embedUrl = `https://eu.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
 
   return Response.json({ embedUrl });
 }

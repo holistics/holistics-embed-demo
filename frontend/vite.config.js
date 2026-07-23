@@ -6,6 +6,16 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 export default defineConfig({
   root: 'frontend',
   plugins: [react(), basicSsl()],
+  server: {
+    // Local dev: proxy /api/* to the Express backend (npm run server).
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
   build: {
     outDir: '../dist',
   },

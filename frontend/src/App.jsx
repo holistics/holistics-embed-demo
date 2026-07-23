@@ -29,6 +29,11 @@ const Icons = {
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   ),
+  Sparkles: (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+    </svg>
+  ),
 };
 
 export default function App() {
@@ -64,7 +69,7 @@ export default function App() {
       const res = await fetch("/api/embed-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portal: portal.portal || portal.id, user, data_source: user.dataSource, url_suffix: portal.urlSuffix }),
+        body: JSON.stringify({ portal: portal.portal || portal.id, user, url_suffix: portal.urlSuffix }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -84,10 +89,10 @@ export default function App() {
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#05264C] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
+      <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#001020] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3 px-6"}`}>
-          <div className="w-8 h-8 rounded bg-[#259B6C] flex items-center justify-center font-bold text-xl shrink-0">H</div>
-          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Embed Portal</span>}
+          <div className="w-8 h-8 rounded bg-[#6733FD] flex items-center justify-center font-bold text-xl shrink-0">M</div>
+          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Mercateam</span>}
         </div>
 
         {!isSidebarCollapsed && <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboards</div>}
@@ -102,7 +107,7 @@ export default function App() {
                 onClick={() => { setActivePage("portal"); setActivePortal(portal); }}
                 title={isSidebarCollapsed ? portal.title : undefined}
                 className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-                  isActive ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  isActive ? "bg-[#6733FD] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
                 <Icon className="w-5 h-5 shrink-0" />
@@ -114,7 +119,7 @@ export default function App() {
             onClick={() => setActivePage("users")}
             title={isSidebarCollapsed ? "Users Reference" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "users" ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              activePage === "users" ? "bg-[#6733FD] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Icons.User className="w-5 h-5 shrink-0" />
@@ -124,7 +129,7 @@ export default function App() {
             onClick={() => setActivePage("custom")}
             title={isSidebarCollapsed ? "Custom Embed" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "custom" ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+              activePage === "custom" ? "bg-[#6733FD] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Icons.Link className="w-5 h-5 shrink-0" />
@@ -162,7 +167,7 @@ export default function App() {
               <select
                 value={activeUser?.id || ""}
                 onChange={(e) => setActiveUser(users.find((u) => u.id === e.target.value))}
-                className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#259B6C] focus:ring focus:ring-[#259B6C] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
+                className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#6733FD] focus:ring focus:ring-[#6733FD] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
               >
                 {users.map((user) => (
                   <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
@@ -186,11 +191,11 @@ export default function App() {
                     onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim()))}
                     placeholder="Paste any embed URL here..."
                     rows={2}
-                    className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#259B6C] focus:ring focus:ring-[#259B6C] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
+                    className="flex-1 rounded-md border border-slate-300 shadow-sm focus:border-[#6733FD] focus:ring focus:ring-[#6733FD] focus:ring-opacity-50 text-sm py-2 px-4 bg-white resize-none break-all"
                   />
                   <button
                     onClick={() => customEmbedUrl.trim() && setCustomEmbedLoaded(customEmbedUrl.trim())}
-                    className="px-5 py-2 bg-[#259B6C] text-white text-sm font-medium rounded-md hover:bg-[#1e7d57] transition-colors"
+                    className="px-5 py-2 bg-[#6733FD] text-white text-sm font-medium rounded-md hover:bg-[#5a2fd6] transition-colors"
                   >
                     Load
                   </button>
@@ -241,11 +246,11 @@ export default function App() {
               <div className="max-w-4xl mx-auto">
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
                   <thead>
-                    <tr className="bg-[#05264C] text-white text-left">
+                    <tr className="bg-[#001020] text-white text-left">
                       <th className="px-6 py-3 font-semibold">Name</th>
                       <th className="px-6 py-3 font-semibold">User ID</th>
                       <th className="px-6 py-3 font-semibold">Email</th>
-                      <th className="px-6 py-3 font-semibold">Data Source</th>
+                      <th className="px-6 py-3 font-semibold">Site(s) — RLS scope</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -255,11 +260,8 @@ export default function App() {
                         <td className="px-6 py-3 font-mono text-xs">{user.id}</td>
                         <td className="px-6 py-3">{user.email}</td>
                         <td className="px-6 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            user.dataSource === "customer_acme" ? "bg-blue-100 text-blue-700" :
-                            user.dataSource === "customer_globex" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-purple-100 text-purple-700"
-                          }`}>{user.dataSource}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">{user.siteLabel}</span>
+                          <div className="mt-1 font-mono text-[11px] text-slate-400">{(user.site_ids || []).join(", ")}</div>
                         </td>
                       </tr>
                     ))}
@@ -285,7 +287,7 @@ export default function App() {
                   <div className="flex-1 relative bg-slate-50">
                     {isLoading && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
-                        <div className="w-8 h-8 border-4 border-[#259B6C] border-t-transparent rounded-full animate-spin"></div>
+                        <div className="w-8 h-8 border-4 border-[#6733FD] border-t-transparent rounded-full animate-spin"></div>
                         <span className="mt-4 text-sm font-medium text-slate-600">Loading Holistics Data...</span>
                       </div>
                     )}
@@ -314,7 +316,7 @@ export default function App() {
             <aside className="w-[420px] bg-[#0a192f] text-slate-300 border-l border-slate-800 flex flex-col z-20 shadow-2xl">
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-[#051024]">
                 <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Icons.Code className="w-4 h-4 text-[#259B6C]" />
+                  <Icons.Code className="w-4 h-4 text-[#6733FD]" />
                   JWT Payload
                 </h3>
                 <button onClick={() => setIsDevMode(false)} className="text-slate-500 hover:text-white">×</button>
@@ -329,16 +331,12 @@ export default function App() {
                     settings: {
                       ai: { enabled: true },
                       allow_dashboard_export: true,
-                      allow_raw_data_export: true,
-                      allow_data_subscribe: true,
+                      allow_raw_data_export: false,
                     },
                     user_attributes: {
-                      vendor_id: "__ALL__",
-                      country: "__ALL__",
-                      city: "__ALL__",
-                      ...(activeUser?.dataSource && { data_source: [activeUser.dataSource] }),
+                      site_id: activeUser?.site_ids || [],
                     },
-                    permissions: {},
+                    permissions: { enable_personal_workspace: true },
                     exp: "Math.floor(Date.now() / 1000) + 3600",
                   }, null, 2)}</pre>
                 </div>
