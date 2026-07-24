@@ -7,11 +7,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const EMBED_CODE = process.env.DASHBOARD_EMBED_CODE;
-const EMBED_SECRET = process.env.DASHBOARD_EMBED_SECRET;
+const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;
+const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET;
 
 const PORTALS = [
-  { id: "brainstorm_apac_dashboard", title: "Brainstorm APAC POC", icon: "Activity" },
+  { id: "brainstorm_apac_embed_portal", title: "Brainstorm APAC POC", icon: "Activity" },
 ];
 
 function getTestIdentities(env) {
@@ -27,8 +27,8 @@ function getTestIdentities(env) {
   }
 
   return [
-    { id: "brainstorm_company_a_viewer", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
-    { id: "brainstorm_company_b_viewer", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
+    { id: "brainstorm_company_a_viewer", orgId: "brainstorm_company_a_org", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", orgId: "brainstorm_company_b_org", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
   ];
 }
 
@@ -44,11 +44,11 @@ app.post("/api/embed-token", (req, res) => {
   const { portal, identity_id } = req.body;
 
   if (!PORTALS.some(({ id }) => id === portal)) {
-    return res.status(400).json({ error: "A valid dashboard is required" });
+    return res.status(400).json({ error: "A valid embed portal is required" });
   }
 
-  if (!EMBED_CODE || !EMBED_SECRET) {
-    return res.status(500).json({ error: "DASHBOARD_EMBED_CODE and DASHBOARD_EMBED_SECRET must be configured" });
+  if (!EMBED_KEY || !EMBED_SECRET) {
+    return res.status(500).json({ error: "HOLISTICS_EMBED_KEY and HOLISTICS_EMBED_SECRET must be configured" });
   }
 
   let identity;
@@ -63,20 +63,28 @@ app.post("/api/embed-token", (req, res) => {
   }
 
   const payload = {
+    object_name: portal,
+    object_type: "EmbedPortal",
+    embed_user_id: identity.id,
+    embed_org_id: identity.orgId,
     settings: {
-      enable_export_data: true,
+      ai: { enabled: true },
+      allow_dashboard_export: true,
+      allow_raw_data_export: true,
+      allow_data_subscribe: true,
     },
-    permissions: { row_based: [] },
-    filters: {},
     user_attributes: {
       company_id: [identity.companyId],
+    },
+    permissions: {
+      enable_personal_workspace: true,
     },
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 
   const token = jwt.sign(payload, EMBED_SECRET, { algorithm: "HS256" });
-  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_CODE)}?_token=${token}`;
+  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_KEY)}?_token=${token}&left_panel_state=collapsed`;
 
   res.json({ embedUrl });
 });

@@ -44,23 +44,23 @@ function getTestIdentities(env) {
   }
 
   return [
-    { id: "brainstorm_company_a_viewer", companyId: companyAId },
-    { id: "brainstorm_company_b_viewer", companyId: companyBId },
+    { id: "brainstorm_company_a_viewer", orgId: "brainstorm_company_a_org", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", orgId: "brainstorm_company_b_org", companyId: companyBId },
   ];
 }
 
 export async function onRequestPost(context) {
-  const EMBED_CODE = context.env.DASHBOARD_EMBED_CODE;
-  const EMBED_SECRET = context.env.DASHBOARD_EMBED_SECRET;
+  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
+  const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
 
   const { portal, identity_id } = await context.request.json();
 
-  if (portal !== "brainstorm_apac_dashboard") {
-    return Response.json({ error: "A valid dashboard is required" }, { status: 400 });
+  if (portal !== "brainstorm_apac_embed_portal") {
+    return Response.json({ error: "A valid embed portal is required" }, { status: 400 });
   }
 
-  if (!EMBED_CODE || !EMBED_SECRET) {
-    return Response.json({ error: "DASHBOARD_EMBED_CODE and DASHBOARD_EMBED_SECRET must be configured" }, { status: 500 });
+  if (!EMBED_KEY || !EMBED_SECRET) {
+    return Response.json({ error: "HOLISTICS_EMBED_KEY and HOLISTICS_EMBED_SECRET must be configured" }, { status: 500 });
   }
 
   let identity;
@@ -75,20 +75,28 @@ export async function onRequestPost(context) {
   }
 
   const payload = {
+    object_name: portal,
+    object_type: "EmbedPortal",
+    embed_user_id: identity.id,
+    embed_org_id: identity.orgId,
     settings: {
-      enable_export_data: true,
+      ai: { enabled: true },
+      allow_dashboard_export: true,
+      allow_raw_data_export: true,
+      allow_data_subscribe: true,
     },
-    permissions: { row_based: [] },
-    filters: {},
     user_attributes: {
       company_id: [identity.companyId],
+    },
+    permissions: {
+      enable_personal_workspace: true,
     },
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 
   const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_CODE)}?_token=${token}`;
+  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_KEY)}?_token=${token}&left_panel_state=collapsed`;
 
   return Response.json({ embedUrl });
 }

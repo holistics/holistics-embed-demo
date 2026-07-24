@@ -1,5 +1,5 @@
 const PORTALS = [
-  { id: "brainstorm_apac_dashboard", title: "Brainstorm APAC POC", icon: "Activity" },
+  { id: "brainstorm_apac_embed_portal", title: "Brainstorm APAC POC", icon: "Activity" },
 ];
 
 function getTestIdentities(env) {
@@ -15,8 +15,8 @@ function getTestIdentities(env) {
   }
 
   return [
-    { id: "brainstorm_company_a_viewer", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
-    { id: "brainstorm_company_b_viewer", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
+    { id: "brainstorm_company_a_viewer", orgId: "brainstorm_company_a_org", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", orgId: "brainstorm_company_b_org", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
   ];
 }
 

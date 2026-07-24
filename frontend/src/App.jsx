@@ -257,6 +257,7 @@ export default function App() {
                     <tr className="bg-[#05264C] text-white text-left">
                       <th scope="col" className="px-6 py-3 font-semibold">Identity</th>
                       <th scope="col" className="px-6 py-3 font-semibold">Identity ID</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Organization ID</th>
                       <th scope="col" className="px-6 py-3 font-semibold">Access</th>
                       <th scope="col" className="px-6 py-3 font-semibold">Company ID</th>
                     </tr>
@@ -266,6 +267,7 @@ export default function App() {
                       <tr key={user.id} className="hover:bg-slate-50">
                         <td className="px-6 py-3">{user.name}</td>
                         <td className="px-6 py-3 font-mono text-xs">{user.id}</td>
+                        <td className="px-6 py-3 font-mono text-xs">{user.orgId}</td>
                         <td className="px-6 py-3">{user.role}</td>
                         <td className="px-6 py-3 font-mono">{user.companyId}</td>
                       </tr>
@@ -284,7 +286,7 @@ export default function App() {
                       <div className="w-3 h-3 rounded-full bg-green-400"></div>
                     </div>
                     <div className="mx-auto bg-white border border-slate-200 text-slate-400 text-xs py-1 px-4 flex-1 max-w-md text-center rounded overflow-hidden text-ellipsis whitespace-nowrap font-mono">
-                      {embedUrl ? "Signed dashboard URL generated server-side" : "Loading..."}
+                      {embedUrl ? "Signed embed portal URL generated server-side" : "Loading..."}
                     </div>
                   </div>
 
@@ -329,13 +331,21 @@ export default function App() {
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
                   <pre className="text-slate-300">{JSON.stringify({
+                    object_name: activePortal?.id,
+                    object_type: "EmbedPortal",
+                    embed_user_id: activeUser?.id,
+                    embed_org_id: activeUser?.orgId,
                     settings: {
-                      enable_export_data: true,
+                      ai: { enabled: true },
+                      allow_dashboard_export: true,
+                      allow_raw_data_export: true,
+                      allow_data_subscribe: true,
                     },
-                    permissions: { row_based: [] },
-                    filters: {},
                     user_attributes: {
                       company_id: activeUser ? [activeUser.companyId] : [],
+                    },
+                    permissions: {
+                      enable_personal_workspace: true,
                     },
                     iat: "Math.floor(Date.now() / 1000)",
                     exp: "Math.floor(Date.now() / 1000) + 3600",
