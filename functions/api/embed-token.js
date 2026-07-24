@@ -31,42 +31,64 @@ async function signJwt(payload, secret) {
   return `${signingInput}.${base64url(signature)}`;
 }
 
+function getTestIdentities(env) {
+  const companyAId = Number(env.BRAINSTORM_COMPANY_A_ID);
+  const companyBId = Number(env.BRAINSTORM_COMPANY_B_ID);
+
+  if (!Number.isSafeInteger(companyAId) || companyAId <= 0 || !Number.isSafeInteger(companyBId) || companyBId <= 0) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must be positive integers");
+  }
+
+  if (companyAId === companyBId) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must identify different companies");
+  }
+
+  return [
+    { id: "brainstorm_company_a_viewer", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", companyId: companyBId },
+  ];
+}
+
 export async function onRequestPost(context) {
-  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
-  const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
+  const EMBED_CODE = context.env.DASHBOARD_EMBED_CODE;
+  const EMBED_SECRET = context.env.DASHBOARD_EMBED_SECRET;
 
-  const { portal, user, data_source, url_suffix } = await context.request.json();
+  const { portal, identity_id } = await context.request.json();
 
-  if (!portal) {
-    return Response.json({ error: "portal is required" }, { status: 400 });
+  if (portal !== "brainstorm_apac_dashboard") {
+    return Response.json({ error: "A valid dashboard is required" }, { status: 400 });
+  }
+
+  if (!EMBED_CODE || !EMBED_SECRET) {
+    return Response.json({ error: "DASHBOARD_EMBED_CODE and DASHBOARD_EMBED_SECRET must be configured" }, { status: 500 });
+  }
+
+  let identity;
+  try {
+    identity = getTestIdentities(context.env).find(({ id }) => id === identity_id);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!identity) {
+    return Response.json({ error: "A valid test identity is required" }, { status: 400 });
   }
 
   const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
     settings: {
-      ai: { enabled: true },
-      allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
+      enable_export_data: true,
     },
+    permissions: { row_based: [] },
+    filters: {},
     user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
-      ...(data_source && { data_source: [data_source] }),
-    },
-    permissions: {
-      enable_personal_workspace: true,
+      company_id: [identity.companyId],
     },
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 
   const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_CODE)}?_token=${token}`;
 
   return Response.json({ embedUrl });
 }

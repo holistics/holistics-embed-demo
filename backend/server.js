@@ -7,59 +7,76 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const EMBED_KEY = process.env.HOLISTICS_EMBED_KEY;
-const EMBED_SECRET = process.env.HOLISTICS_EMBED_SECRET;
+const EMBED_CODE = process.env.DASHBOARD_EMBED_CODE;
+const EMBED_SECRET = process.env.DASHBOARD_EMBED_SECRET;
 
 const PORTALS = [
-  { id: "hotels_embed_portal", title: "Hotel Analytics", icon: "Activity" },
-  { id: "ask_ai", title: "Ask AI", icon: "Activity", portal: "hotels_embed_portal", urlSuffix: "/ai" },
-  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart" },
+  { id: "brainstorm_apac_dashboard", title: "Brainstorm APAC POC", icon: "Activity" },
 ];
 
-const USERS = [
-  { id: "user_1", name: "Alice Johnson", email: "alice.johnson@acmehospitality.com", dataSource: "customer_acme" },
-  { id: "user_2", name: "Erik Lindgren", email: "erik.lindgren@acmehospitality.com", dataSource: "customer_acme" },
-  { id: "user_3", name: "Bob Smith", email: "bob.smith@globexhotels.com", dataSource: "customer_globex" },
-  { id: "user_4", name: "Sofia Nilsen", email: "sofia.nilsen@globexhotels.com", dataSource: "customer_globex" },
-  { id: "chinh.dm", name: "Chinh DM", email: "chinh.dm@holistics.io", dataSource: "customer_holistics" },
-];
+function getTestIdentities(env) {
+  const companyAId = Number(env.BRAINSTORM_COMPANY_A_ID);
+  const companyBId = Number(env.BRAINSTORM_COMPANY_B_ID);
+
+  if (!Number.isSafeInteger(companyAId) || companyAId <= 0 || !Number.isSafeInteger(companyBId) || companyBId <= 0) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must be positive integers");
+  }
+
+  if (companyAId === companyBId) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must identify different companies");
+  }
+
+  return [
+    { id: "brainstorm_company_a_viewer", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
+  ];
+}
 
 app.get("/api/config", (req, res) => {
-  res.json({ portals: PORTALS, users: USERS });
+  try {
+    res.json({ portals: PORTALS, users: getTestIdentities(process.env) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post("/api/embed-token", (req, res) => {
-  const { portal, user, data_source, url_suffix } = req.body;
+  const { portal, identity_id } = req.body;
 
-  if (!portal) {
-    return res.status(400).json({ error: "portal is required" });
+  if (!PORTALS.some(({ id }) => id === portal)) {
+    return res.status(400).json({ error: "A valid dashboard is required" });
+  }
+
+  if (!EMBED_CODE || !EMBED_SECRET) {
+    return res.status(500).json({ error: "DASHBOARD_EMBED_CODE and DASHBOARD_EMBED_SECRET must be configured" });
+  }
+
+  let identity;
+  try {
+    identity = getTestIdentities(process.env).find(({ id }) => id === identity_id);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  if (!identity) {
+    return res.status(400).json({ error: "A valid test identity is required" });
   }
 
   const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
     settings: {
-      ai: { enabled: true },
-      allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
+      enable_export_data: true,
     },
+    permissions: { row_based: [] },
+    filters: {},
     user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
-      ...(data_source && { data_source: [data_source] }),
+      company_id: [identity.companyId],
     },
-    permissions: {
-      "enable_personal_workspace": true
-    },
+    iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
 
   const token = jwt.sign(payload, EMBED_SECRET, { algorithm: "HS256" });
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  const embedUrl = `https://demo4.holistics.io/embed/${encodeURIComponent(EMBED_CODE)}?_token=${token}`;
 
   res.json({ embedUrl });
 });

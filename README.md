@@ -1,8 +1,8 @@
-# Holistics Embed Demo
+# Brainstorm APAC Embed POC
 
-A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
+A focused adaptation of the Holistics embed template for testing company-level row-level security on the Brainstorm APAC dashboard.
 
-**Live URL**: https://holistics-embed-demo.pages.dev
+The browser selects one of two synthetic non-admin identities. The backend maps that identity to an approved numeric company ID, signs a short-lived JWT, and returns the single-dashboard embed URL. The browser cannot submit an arbitrary company ID.
 
 ![](./holistics-embed-demo.png)
 
@@ -40,14 +40,26 @@ npm install
 
 ### 2. Configure environment variables
 
-Create a `.env` file in the project root:
+The app requires these runtime variables:
 
-```env
-HOLISTICS_EMBED_KEY=your_embed_key_here
-HOLISTICS_EMBED_SECRET=your_embed_secret_here
+```text
+DASHBOARD_EMBED_CODE
+DASHBOARD_EMBED_SECRET
+BRAINSTORM_COMPANY_A_ID
+BRAINSTORM_COMPANY_B_ID
+```
+
+The company IDs must be different positive integers from the deployed Brainstorm seed data. Keep the dashboard identifier and signing secret out of Git.
+
+For local use, store only 1Password references in `.env`, then resolve them at process start:
+
+```bash
+op run --env-file .env -- npm run server
 ```
 
 ### 3. Start the backend server
+
+If you did not start it through `op run` above:
 
 ```bash
 npm run server
@@ -63,11 +75,17 @@ npm run dev
 
 Open <https://localhost:5173> in your browser. Accept the self-signed certificate warning.
 
+Switch between the two synthetic identities in the header. Each generated token contains one numeric user attribute:
+
+```text
+user_attributes.company_id = [<seeded numeric company ID>]
+```
+
+All Brainstorm datasets must independently map their numeric `company_id` field to this user attribute before the embed can be treated as an RLS proof.
+
 ## Deployment (Cloudflare Pages)
 
-The app is deployed to Cloudflare Pages with serverless functions handling the API.
-
-**Live URL**: https://holistics-embed-demo.pages.dev
+The template can be deployed to Cloudflare Pages with serverless functions handling the API.
 
 ### Deploy manually
 
@@ -85,12 +103,4 @@ CLOUDFLARE_ACCOUNT_ID=<your_account_id> wrangler pages deploy dist \
   --commit-dirty=true
 ```
 
-### Set secrets
-
-```bash
-echo -n 'your_key' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
-  wrangler pages secret put HOLISTICS_EMBED_KEY --project-name holistics-embed-demo
-
-echo -n 'your_secret' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
-  wrangler pages secret put HOLISTICS_EMBED_SECRET --project-name holistics-embed-demo
-```
+Configure all four runtime variables in the deployment environment. Do not commit their values or a populated environment file.
