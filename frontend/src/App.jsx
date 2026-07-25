@@ -64,6 +64,7 @@ export default function App() {
 
   const fetchEmbedUrl = useCallback(async (portal, user, signal) => {
     setIsLoading(true);
+    setEmbedUrl(null);
     setError(null);
     try {
       const res = await fetch("/api/embed-token", {
