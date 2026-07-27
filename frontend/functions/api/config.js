@@ -1,17 +1,29 @@
 const PORTALS = [
-  { id: "hotels_embed_portal", title: "Hotel Analytics", icon: "Activity" },
-  { id: "ask_ai", title: "Ask AI", icon: "Activity", portal: "hotels_embed_portal", urlSuffix: "/ai" },
-  { id: "ecommerce_portal", title: "Ecommerce Dashboard", icon: "ShoppingCart" },
+  { id: "brainstorm_apac_embed_portal", title: "Brainstorm APAC POC", icon: "Activity" },
 ];
 
-const USERS = [
-  { id: "user_1", name: "Alice Johnson", email: "alice.johnson@acmehospitality.com", dataSource: "customer_acme" },
-  { id: "user_2", name: "Erik Lindgren", email: "erik.lindgren@acmehospitality.com", dataSource: "customer_acme" },
-  { id: "user_3", name: "Bob Smith", email: "bob.smith@globexhotels.com", dataSource: "customer_globex" },
-  { id: "user_4", name: "Sofia Nilsen", email: "sofia.nilsen@globexhotels.com", dataSource: "customer_globex" },
-  { id: "chinh.dm", name: "Chinh DM", email: "chinh.dm@holistics.io", dataSource: "customer_holistics" },
-];
+function getTestIdentities(env) {
+  const companyAId = Number(env.BRAINSTORM_COMPANY_A_ID);
+  const companyBId = Number(env.BRAINSTORM_COMPANY_B_ID);
 
-export async function onRequestGet() {
-  return Response.json({ portals: PORTALS, users: USERS });
+  if (!Number.isSafeInteger(companyAId) || companyAId <= 0 || !Number.isSafeInteger(companyBId) || companyBId <= 0) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must be positive integers");
+  }
+
+  if (companyAId === companyBId) {
+    throw new Error("BRAINSTORM_COMPANY_A_ID and BRAINSTORM_COMPANY_B_ID must identify different companies");
+  }
+
+  return [
+    { id: "brainstorm_company_a_viewer", orgId: "brainstorm_company_a_org", name: "Synthetic non-admin — Company A", role: "Non-admin RLS test identity", companyId: companyAId },
+    { id: "brainstorm_company_b_viewer", orgId: "brainstorm_company_b_org", name: "Synthetic non-admin — Company B", role: "Non-admin RLS test identity", companyId: companyBId },
+  ];
+}
+
+export async function onRequestGet(context) {
+  try {
+    return Response.json({ portals: PORTALS, users: getTestIdentities(context.env) });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }

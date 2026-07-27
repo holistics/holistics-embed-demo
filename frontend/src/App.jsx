@@ -48,37 +48,47 @@ export default function App() {
 
   useEffect(() => {
     fetch("/api/config")
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        return data;
+      })
       .then((data) => {
         setPortals(data.portals);
         setUsers(data.users);
         setActivePortal(data.portals[0]);
         setActiveUser(data.users[0]);
-      });
+      })
+      .catch((err) => setError(err.message));
   }, []);
 
-  const fetchEmbedUrl = useCallback(async (portal, user) => {
+  const fetchEmbedUrl = useCallback(async (portal, user, signal) => {
     setIsLoading(true);
+    setEmbedUrl(null);
     setError(null);
     try {
       const res = await fetch("/api/embed-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portal: portal.portal || portal.id, user, data_source: user.dataSource, url_suffix: portal.urlSuffix }),
+        body: JSON.stringify({ portal: portal.id, identity_id: user.id }),
+        signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setEmbedUrl(data.embedUrl);
     } catch (err) {
+      if (err.name === "AbortError") return;
       setError(err.message);
       setEmbedUrl(null);
     } finally {
-      setIsLoading(false);
+      if (!signal.aborted) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (activePortal && activeUser) fetchEmbedUrl(activePortal, activeUser);
+    const controller = new AbortController();
+    if (activePortal && activeUser) fetchEmbedUrl(activePortal, activeUser, controller.signal);
+    return () => controller.abort();
   }, [activePortal, activeUser, fetchEmbedUrl]);
 
   return (
@@ -87,7 +97,7 @@ export default function App() {
       <div className={`${isSidebarCollapsed ? "w-16" : "w-64"} bg-[#05264C] text-white flex flex-col shadow-xl z-20 transition-all duration-200`}>
         <div className={`p-4 flex items-center ${isSidebarCollapsed ? "justify-center" : "gap-3 px-6"}`}>
           <div className="w-8 h-8 rounded bg-[#259B6C] flex items-center justify-center font-bold text-xl shrink-0">H</div>
-          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Embed Portal</span>}
+          {!isSidebarCollapsed && <span className="font-semibold text-lg tracking-wide">Brainstorm APAC</span>}
         </div>
 
         {!isSidebarCollapsed && <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboards</div>}
@@ -112,13 +122,13 @@ export default function App() {
           })}
           <button
             onClick={() => setActivePage("users")}
-            title={isSidebarCollapsed ? "Users Reference" : undefined}
+            title={isSidebarCollapsed ? "RLS test identities" : undefined}
             className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
               activePage === "users" ? "bg-[#259B6C] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`}
           >
             <Icons.User className="w-5 h-5 shrink-0" />
-            {!isSidebarCollapsed && "Users Reference"}
+            {!isSidebarCollapsed && "RLS test identities"}
           </button>
           <button
             onClick={() => setActivePage("custom")}
@@ -155,17 +165,18 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
-          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : activePortal?.title}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">{activePage === "users" ? "RLS test identities" : activePage === "custom" ? "Custom Embed" : activePortal?.title}</h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500">Viewing as:</span>
+              <label htmlFor="test-identity" className="text-slate-500">Test identity:</label>
               <select
+                id="test-identity"
                 value={activeUser?.id || ""}
                 onChange={(e) => setActiveUser(users.find((u) => u.id === e.target.value))}
                 className="block w-56 rounded-md border-slate-300 shadow-sm focus:border-[#259B6C] focus:ring focus:ring-[#259B6C] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
               >
                 {users.map((user) => (
-                  <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                  <option key={user.id} value={user.id}>{user.name}</option>
                 ))}
               </select>
             </div>
@@ -240,12 +251,16 @@ export default function App() {
             ) : activePage === "users" ? (
               <div className="max-w-4xl mx-auto">
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
+                  <caption className="p-4 text-left bg-white text-slate-600">
+                    Synthetic non-admin identities for cross-company row-level security testing.
+                  </caption>
                   <thead>
                     <tr className="bg-[#05264C] text-white text-left">
-                      <th className="px-6 py-3 font-semibold">Name</th>
-                      <th className="px-6 py-3 font-semibold">User ID</th>
-                      <th className="px-6 py-3 font-semibold">Email</th>
-                      <th className="px-6 py-3 font-semibold">Data Source</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Identity</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Identity ID</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Organization ID</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Access</th>
+                      <th scope="col" className="px-6 py-3 font-semibold">Company ID</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -253,14 +268,9 @@ export default function App() {
                       <tr key={user.id} className="hover:bg-slate-50">
                         <td className="px-6 py-3">{user.name}</td>
                         <td className="px-6 py-3 font-mono text-xs">{user.id}</td>
-                        <td className="px-6 py-3">{user.email}</td>
-                        <td className="px-6 py-3">
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            user.dataSource === "customer_acme" ? "bg-blue-100 text-blue-700" :
-                            user.dataSource === "customer_globex" ? "bg-emerald-100 text-emerald-700" :
-                            "bg-purple-100 text-purple-700"
-                          }`}>{user.dataSource}</span>
-                        </td>
+                        <td className="px-6 py-3 font-mono text-xs">{user.orgId}</td>
+                        <td className="px-6 py-3">{user.role}</td>
+                        <td className="px-6 py-3 font-mono">{user.companyId}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -277,7 +287,7 @@ export default function App() {
                       <div className="w-3 h-3 rounded-full bg-green-400"></div>
                     </div>
                     <div className="mx-auto bg-white border border-slate-200 text-slate-400 text-xs py-1 px-4 flex-1 max-w-md text-center rounded overflow-hidden text-ellipsis whitespace-nowrap font-mono">
-                      {embedUrl || "Loading..."}
+                      {embedUrl ? "Signed embed portal URL generated server-side" : "Loading..."}
                     </div>
                   </div>
 
@@ -290,8 +300,8 @@ export default function App() {
                       </div>
                     )}
                     {error && (
-                      <div className="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
-                        Error: {error}. Make sure the backend server is running on port 3001.
+                      <div role="alert" className="absolute inset-0 flex items-center justify-center text-red-500 text-sm">
+                        Error: {error}
                       </div>
                     )}
                     {embedUrl && (
@@ -299,7 +309,7 @@ export default function App() {
                         key={embedUrl}
                         src={embedUrl}
                         className="w-full h-full border-0"
-                        title="Holistics Embedded Dashboard"
+                        title="Brainstorm APAC embedded dashboard"
                         allow="clipboard-read; clipboard-write"
                       />
                     )}
@@ -322,10 +332,10 @@ export default function App() {
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
                   <pre className="text-slate-300">{JSON.stringify({
-                    object_name: activePortal?.portal || activePortal?.id,
+                    object_name: activePortal?.id,
                     object_type: "EmbedPortal",
                     embed_user_id: activeUser?.id,
-                    embed_user_email: activeUser?.email,
+                    embed_org_id: activeUser?.orgId,
                     settings: {
                       ai: { enabled: true },
                       allow_dashboard_export: true,
@@ -333,12 +343,12 @@ export default function App() {
                       allow_data_subscribe: true,
                     },
                     user_attributes: {
-                      vendor_id: "__ALL__",
-                      country: "__ALL__",
-                      city: "__ALL__",
-                      ...(activeUser?.dataSource && { data_source: [activeUser.dataSource] }),
+                      company_id: activeUser ? [activeUser.companyId] : [],
                     },
-                    permissions: {},
+                    permissions: {
+                      enable_personal_workspace: true,
+                    },
+                    iat: "Math.floor(Date.now() / 1000)",
                     exp: "Math.floor(Date.now() / 1000) + 3600",
                   }, null, 2)}</pre>
                 </div>
