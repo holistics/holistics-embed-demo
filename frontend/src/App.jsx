@@ -251,6 +251,7 @@ export default function App() {
                       <th className="px-6 py-3 font-semibold">User ID</th>
                       <th className="px-6 py-3 font-semibold">Email</th>
                       <th className="px-6 py-3 font-semibold">Site(s) — RLS scope</th>
+                      <th className="px-6 py-3 font-semibold">Org — shared workspace</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -262,6 +263,9 @@ export default function App() {
                         <td className="px-6 py-3">
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">{user.siteLabel}</span>
                           <div className="mt-1 font-mono text-[11px] text-slate-400">{(user.site_ids || []).join(", ")}</div>
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700 font-mono">{user.orgId}</span>
                         </td>
                       </tr>
                     ))}
@@ -336,7 +340,11 @@ export default function App() {
                     user_attributes: {
                       site_id: activeUser?.site_ids || [],
                     },
-                    permissions: { enable_personal_workspace: true },
+                    embed_org_id: activeUser?.orgId,
+                    permissions: {
+                      enable_personal_workspace: true,
+                      org_workspace_role: "editor",
+                    },
                     exp: "Math.floor(Date.now() / 1000) + 3600",
                   }, null, 2)}</pre>
                 </div>

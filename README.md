@@ -46,15 +46,16 @@ Open the printed URL (**https://localhost:5173**) and accept the self-signed cer
 Use the **"Viewing as"** switcher (top-right) to change the embed user and watch the data
 re-scope by site. Toggle **Show Dev Tools** (bottom-left) to inspect the JWT payload.
 
-## Demo users (site scopes)
-| User | site_id(s) | Sees |
-|------|-----------|------|
-| Rue du Perche — Site Manager | `Ce6amNfeKmH9XssxVCwT` | one site |
-| Gerson — Site Manager | `3BD7SuGKJknq9C4cpwmR` | one site |
-| Regional Lead — 2 sites | both of the above | multiple sites |
+## Demo users
+| User | Sees |
+|------|------|
+| Rue du Perche — Site Manager | one site |
+| Gerson — Site Manager | one site |
+| Regional Lead — 2 sites | multiple sites |
 
-To add/change users or their site scope, edit **`functions/api/config.js`** (deploy) **and**
-**`backend/server.js`** (local) — keep the two lists in sync.
+The exact site scope for each user is shown on the app's **Users** page. To add/change users or
+their scope, edit **`functions/api/config.js`** (deploy) **and** **`backend/server.js`** (local) —
+keep the two lists in sync.
 
 ## How scoping works
 - The token's `user_attributes.site_id` is an **array** (a user can hold several sites).
@@ -62,8 +63,62 @@ To add/change users or their site scope, edit **`functions/api/config.js`** (dep
   `permission site_access { field: r(<model>.site_id) operator: 'matches_user_attribute' value: 'site_id' }`.
 - Every dataset in the portal is scoped — dashboard filters are **not** security, so Explore /
   Ask-AI on an unscoped dataset would leak other sites. All three are covered.
-- **View-only vs builder**: `permissions.enable_personal_workspace` in the token (`embed-token.js`
-  / `server.js`) toggles whether users can build & save their own dashboards.
+
+## Workspaces & user-built dashboards
+Docs: [user-built dashboards](https://docs.holistics.io/embedded/user-built-dashboards) ·
+[identity & workspace](https://docs.holistics.io/embedded/identity-workspace)
+
+Embed users can build their own dashboards on top of the portal's datasets. What they can do is
+set by **two independent fields** in the token's `permissions` (in `embed-token.js` / `server.js`),
+plus the top-level `embed_org_id`:
+
+| Field | Values | Controls |
+|-------|--------|----------|
+| `org_workspace_role` | `no_access` (default) · `viewer` · `editor` | The **shared** (org) workspace |
+| `enable_personal_workspace` | `false` (default) · `true` | A **private** personal workspace |
+
+**`org_workspace_role`:** `no_access` = can't see the shared workspace · `viewer` = view shared
+dashboards, can't edit · `editor` = create / edit / delete shared dashboards.
+**`enable_personal_workspace: true`** = a private space to build/save dashboards only that user sees.
+
+The combination is the "tier":
+
+| `org_workspace_role` | `enable_personal_workspace` | View shared | Build personal | Build shared | Tier |
+|---|---|:--:|:--:|:--:|---|
+| `viewer` | `false` | ✓ | ✗ | ✗ | **Viewer** |
+| `no_access` | `true` | ✗ | ✓ | ✗ | **Personal Creator** |
+| `editor` | `false` | ✓ | ✗ | ✓ | **Company Creator** |
+| `editor` | `true` | ✓ | ✓ | ✓ | Company Creator + personal (full) |
+
+> This demo puts **every** user on the full tier: `org_workspace_role: "editor"` +
+> `enable_personal_workspace: true`. For a real rollout, map tiers per user (floor users →
+> `viewer`, power users → personal-only, deployment leads → `editor`).
+
+### `embed_org_id` — the shared-workspace boundary
+`embed_org_id` (set from each user's `orgId`) defines **who shares a workspace**:
+- Users with the **same** `embed_org_id` see and share the same shared dashboards.
+- Different `embed_org_id`s are **fully isolated** — a shared dashboard never crosses orgs.
+- It's a **single value per token** (not a list). Holistics identifies a user as
+  `embed_org_id` + `embed_user_id`, so the **same person under a different org is a different
+  identity** with its own separate personal workspace. To move someone across orgs you mint a new
+  token — their dashboards don't follow them. (Contrast `site_id`, which is a multi-value
+  `user_attributes` array — one user can *see* many sites but *belongs to* one sharing org.)
+
+This single-org model is exactly the isolation Mercateam wants: an embed user can only ever share
+within their own org, never across customers.
+
+**Not governed by these roles:** (1) **Explore / drill-down** is gated by whether a dataset is
+*included in the portal*, not by `org_workspace_role` — that's why every dataset needs its own
+`site_access` RLS. (2) Embed users **cannot create datasets/models** — they build dashboards from
+datasets the Holistics/deployment team provides.
+
+### Sharing test setup (this demo)
+Rue du Perche, Gerson and Regional Lead share `orgId: "org-region-nord"`, so a dashboard one of
+them saves to the **shared** workspace appears for the other two — while each still sees only their
+own site's rows (RLS is independent of the org). Genouillac has its own org
+(`org-eurocoustic-genouillac`), so it must **not** see the region-nord shared dashboards — the
+isolation half of the test. **Try it:** build a shared dashboard as Rue du Perche → switch to
+Gerson (sees it) → switch to Genouillac (doesn't). The **Users** page shows each user's org.
 
 ## Deploy (Cloudflare Pages)
 ```bash

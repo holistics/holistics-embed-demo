@@ -63,10 +63,16 @@ export async function onRequestPost(context) {
     user_attributes: {
       site_id: user?.site_ids || [],
     },
-    // Let embed users build/save their own dashboards (Personal Creator tier).
-    // Set to false for view-only.
+    // Shared-workspace boundary: users with the same embed_org_id can share dashboards
+    // with each other; different orgs are isolated. Required for org_workspace_role to work.
+    embed_org_id: user?.orgId,
+    // User-built dashboards (https://docs.holistics.io/embedded/user-built-dashboards):
+    //  - enable_personal_workspace: build/save PRIVATE dashboards (only the user sees them)
+    //  - org_workspace_role 'editor': build/save SHARED dashboards in their org workspace
+    //    (set 'viewer' for read-only shared, or omit to disable shared entirely).
     permissions: {
       enable_personal_workspace: true,
+      org_workspace_role: "editor",
     },
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
