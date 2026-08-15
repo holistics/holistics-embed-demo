@@ -18,10 +18,35 @@
 //              how Masterview sees everything without a special case.
 //
 // AGENTIC CAPABILITY
-// Self-serve exploration is a property of the PORTAL, not of the token:
-// a portal that lists the dataset allows it, one that lists only the
-// dashboard does not. So capability picks which portal the token names.
-// Both portals sign with the same key/secret.
+// One portal, four users, differentiated by the token. Per the embed
+// parameters reference these are the per-user knobs:
+//
+//   settings.ai.enabled                    Ask AI
+//   permissions.enable_personal_workspace  save privately
+//   permissions.org_workspace_role         no_access | viewer | editor
+//   user_attributes                        which rows
+//
+// Self-Serve (Explorer)          -> editor + Ask AI + personal workspace
+// Standard/Traditional Dashboard -> no_access, no AI, no saving
+//
+// WHAT THE TOKEN CANNOT DO. Self-serve exploration is not a per-user
+// switch anywhere in the docs; it exists because the dataset is listed
+// in the portal, for everyone who reaches that portal. Myri therefore
+// gets no AI and can save nothing, but ad-hoc exploration is not
+// provably withheld from her. The only documented way to withhold it is
+// a second portal without the dataset.
+//
+// ORG ID
+// orgId becomes embed_org_id, the shared-workspace boundary: same orgId
+// means users can see each other's shared dashboards, different orgIds
+// are isolated. org_workspace_role does NOTHING without it, so the two
+// stand or fall together -- drop one and the other is dead config.
+// It is a field on the user rather than a slug of the display name so
+// that renaming "ShelfOptix" cannot silently re-home saved work.
+//
+// Row scoping is unaffected by any of this: a shared dashboard re-runs
+// its queries as whoever opens it, under their own store_state and dept,
+// so sharing a workspace never shares rows.
 // =====================================================================
 
 export const ALL = "__ALL__";
@@ -44,6 +69,7 @@ export const USERS = [
     name: "Amit",
     email: "amarty@shelfoptix.com",
     org: "ShelfOptix",
+    orgId: "shelfoptix",
     states: ["GA"],
     depts: FIELD_DEPTS,
     capability: "explorer",
@@ -53,6 +79,7 @@ export const USERS = [
     name: "Randy",
     email: "rwilson@retailgis.com",
     org: "RetailGIS",
+    orgId: "retailgis",
     states: ["TN", "KY"],
     depts: FIELD_DEPTS,
     capability: "explorer",
@@ -62,6 +89,7 @@ export const USERS = [
     name: "Myri",
     email: "mdiazmartinez@shelfoptix.com",
     org: "ShelfOptix",
+    orgId: "shelfoptix",
     states: ["GA", "TN", "KY"],
     depts: CARE_DEPTS,
     capability: "viewer",
@@ -71,16 +99,17 @@ export const USERS = [
     name: "Masterview",
     email: "mv@shelfoptix.com",
     org: "ShelfOptix",
+    orgId: "shelfoptix",
     states: ALL,
     depts: ALL,
     capability: "explorer",
   },
 ];
 
-export const PORTALS = {
-  explorer: "retailfocus_explorer",
-  viewer: "retailfocus_viewer",
-};
+// One portal for everyone. The Explorer/Standard split is expressed in
+// the token's settings and permissions, not by pointing at a second
+// portal object.
+export const PORTAL = "retailfocus_portal";
 
 export const CAPABILITY_LABEL = {
   explorer: "Self-Serve (Explorer)",
@@ -106,7 +135,7 @@ export function buildPayload(user) {
   const now = Math.floor(Date.now() / 1000);
 
   return {
-    object_name: PORTALS[user.capability],
+    object_name: PORTAL,
     object_type: "EmbedPortal",
 
     // Identity. embed_user_id keys the user's saved work, so it has to be
@@ -114,11 +143,17 @@ export function buildPayload(user) {
     embed_user_id: user.id,
     embed_user_email: user.email,
 
+    // Shared-workspace boundary. org_workspace_role below is inert without
+    // this, which is the whole reason it is here.
+    embed_org_id: user.orgId,
+
     user_attributes: userAttributesOf(user),
 
-    // Explorers can keep what they build; viewers get a read-only seat.
+    // Explorers can keep what they build, privately and in their org's
+    // shared workspace. The Standard view gets neither: no personal space,
+    // no shared workspace, which is what "traditional dashboard" means here.
     permissions: isExplorer
-      ? { enable_personal_workspace: true, org_workspace_role: "viewer" }
+      ? { enable_personal_workspace: true, org_workspace_role: "editor" }
       : { enable_personal_workspace: false, org_workspace_role: "no_access" },
 
     settings: {
@@ -145,6 +180,7 @@ export function publicUsers() {
     name: u.name,
     email: u.email,
     org: u.org,
+    orgId: u.orgId,
     states: u.states,
     depts: u.depts,
     capability: u.capability,

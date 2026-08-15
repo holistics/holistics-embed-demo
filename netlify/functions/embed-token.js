@@ -4,8 +4,8 @@
 // That is the whole point of the login: without it, a POST to this
 // endpoint could name any persona and get that persona's data back.
 //
-// Both portals share one key/secret. Embed credentials are per-tenant, so
-// only object_name changes between an Explorer and a Viewer token.
+// One portal for all four users. What differs per user is inside the
+// token: Ask AI, workspace permissions, and the row-level attributes.
 import jwt from "jsonwebtoken";
 import { findUser, buildPayload } from "./_users.js";
 import { authConfigError, userIdFromRequest } from "./_auth.js";
@@ -42,8 +42,9 @@ export const handler = async (event) => {
   const payload = buildPayload(user);
   const token = jwt.sign(payload, secret, { algorithm: "HS256" });
 
-  // Viewers open on the dashboard with the nav collapsed; explorers get
-  // the panel so they can reach the dataset.
+  // The Standard view opens with the nav collapsed so it reads as a
+  // dashboard rather than a workspace; explorers keep the panel, which is
+  // how they reach the dataset and Ask AI.
   const params = new URLSearchParams({ _token: token });
   if (user.capability === "viewer") params.set("left_panel_state", "collapsed");
 
