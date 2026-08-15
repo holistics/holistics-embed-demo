@@ -72,10 +72,30 @@ attributes ride in the token but nothing filters on them.
   On top of that the token varies `settings.ai.enabled` and the workspace
   permissions, so Explorers can save their own work and Viewers cannot.
 
-**The sign-in is not authentication.** The browser posts a user id and the
-server trusts it, which is fine for a demo and not fine for real data.
-Anything real needs a session in front of `/api/embed-token`, with the
-user derived from the session rather than the request body.
+**How sign-in works**
+
+One shared password across all four accounts, held in
+`SHELFOPTIX_DEMO_PASSWORD` and checked only on the server. The browser
+never receives it.
+
+1. `POST /api/login` with `{ email, password }`. A wrong password and an
+   unknown email return the same 401, so the endpoint cannot be used to
+   discover which accounts exist.
+2. On success it returns a session token signed with
+   `SHELFOPTIX_SESSION_SECRET`, valid 8 hours.
+3. `POST /api/embed-token` requires that token in an `Authorization:
+   Bearer` header and reads the identity **out of the token**, ignoring
+   the request body entirely.
+
+Step 3 is the part that matters. A password screen alone would change
+nothing, because anyone could still POST to the token endpoint and name
+whichever persona they liked. Deriving the identity from something the
+server signed is what makes the scope real.
+
+**It is still demo-grade.** One shared password, no per-user credentials,
+no lockout, no rate limiting, and no revocation beyond rotating
+`SHELFOPTIX_SESSION_SECRET`. It is enough that a link to the site is not
+a link to the data, and no more than that.
 
 ## Getting Started
 
@@ -90,9 +110,15 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
-HOLISTICS_RETAILFOCUS_PORTAL_KEY=your_embed_key_here
-HOLISTICS_RETAILFOCUS_PORTAL_SECRET=your_embed_secret_here
+HOLISTICS_SHELFOPTIX_PORTAL_KEY=your_embed_key_here
+HOLISTICS_SHELFOPTIX_PORTAL_SECRET=your_embed_secret_here
 HOLISTICS_HOST=https://us.holistics.io
+
+# Shared sign-in password for the four accounts, and the key that signs
+# session tokens. Both are required; the app refuses to mint an embed
+# token without them.
+SHELFOPTIX_DEMO_PASSWORD='...'
+SHELFOPTIX_SESSION_SECRET=...
 ```
 
 One key/secret covers both portals: embed credentials are per-tenant, not
@@ -101,6 +127,13 @@ per-portal, so the token only swaps `object_name` between them.
 To get them: publish `embed/retailfocus.embed.aml` from the
 `shelfoptix-poc-aml` project, then **Tools → Embedded Analytics**, find
 `retailfocus_explorer`, click **Enable**, and copy the Key ID and Secret.
+
+Quote the password. `.env` treats an unquoted `#` as the start of a
+comment, which silently truncates the value and produces a password that
+looks right in the file and fails at the login screen.
+
+Generate the session secret with `openssl rand -hex 48`. Changing it
+signs everyone out, which is the only revocation this demo has.
 
 ### 3. Start the backend server
 

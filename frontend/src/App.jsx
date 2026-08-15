@@ -46,17 +46,25 @@ function CapabilityBadge({ capability, label }) {
 }
 
 // --- Login -----------------------------------------------------------
-// A dropdown of emails, as asked. This is a demo sign-in, not auth: the
-// server trusts the id the browser sends. Real deployment needs a session
-// in front of /api/embed-token.
-function LoginScreen({ users, onSignIn, loading }) {
+// A dropdown of emails plus one shared password. The password is checked
+// on the server and exchanged for a short-lived session token; the token
+// is what /api/embed-token requires, so the identity it mints comes from
+// something the server signed rather than from the request body.
+function LoginScreen({ users, onSignIn, loading, error, submitting }) {
   // Derived, not synced: the field falls back to the first account until
   // someone picks one, so there is no effect writing state on mount.
   const [chosen, setChosen] = useState("");
+  const [password, setPassword] = useState("");
   const email = chosen || users[0]?.email || "";
   const setEmail = setChosen;
 
   const selected = users.find((u) => u.email === email);
+  const canSubmit = Boolean(selected) && password.length > 0 && !submitting;
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (canSubmit) onSignIn(email, password);
+  };
 
   return (
     <div className="min-h-screen w-full bg-[#070d18] flex items-center justify-center p-6 font-sans">
@@ -70,6 +78,7 @@ function LoginScreen({ users, onSignIn, loading }) {
           <h1 className="text-xl font-semibold text-slate-800">Sign in</h1>
           <p className="text-sm text-slate-500 mt-1 mb-6">Choose an account to continue to RetailFocus.</p>
 
+          <form onSubmit={submit}>
           <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
           <select
             id="email"
@@ -82,6 +91,21 @@ function LoginScreen({ users, onSignIn, loading }) {
               <option key={u.id} value={u.email}>{u.email}</option>
             ))}
           </select>
+
+          <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">Password</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••••••"
+            className="w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white"
+          />
+
+          {error && (
+            <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>
+          )}
 
           {/* What this account will actually see, before signing in. */}
           {selected && (
@@ -106,15 +130,16 @@ function LoginScreen({ users, onSignIn, loading }) {
           )}
 
           <button
-            onClick={() => selected && onSignIn(selected)}
-            disabled={!selected || loading}
+            type="submit"
+            disabled={!canSubmit || loading}
             className="mt-6 w-full py-2.5 bg-[#E63946] text-white text-sm font-semibold rounded-md hover:bg-[#d62839] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {loading ? "Loading accounts…" : "Sign in"}
+            {loading ? "Loading accounts…" : submitting ? "Signing in…" : "Sign in"}
           </button>
+          </form>
 
           <p className="text-xs text-slate-400 mt-4 text-center">
-            Demo sign-in. No password: the account you pick becomes the embed identity.
+            Demo sign-in: one shared password across the four accounts. The account you pick becomes the embed identity.
           </p>
         </div>
       </div>
@@ -126,16 +151,22 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
 
-  // The signed-in user. Restored from sessionStorage so a refresh does not
-  // bounce you back to the login screen.
-  const [session, setSession] = useState(() => {
+  // The signed-in user plus the server-issued session token. Restored from
+  // sessionStorage so a refresh does not bounce you back to the login screen.
+  // The token is the credential from here on; the password is never kept.
+  const [auth, setAuth] = useState(() => {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY);
-      return raw ? JSON.parse(raw) : null;
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed?.user && parsed?.session ? parsed : null;
     } catch {
       return null;
     }
   });
+  const session = auth?.user || null;
+
+  const [loginError, setLoginError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const [activePage, setActivePage] = useState("embed"); // "embed" | "users" | "custom"
   const [customEmbedUrl, setCustomEmbedUrl] = useState("");
@@ -156,15 +187,33 @@ export default function App() {
       .finally(() => setUsersLoading(false));
   }, []);
 
-  const signIn = useCallback((user) => {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
-    setSession(user);
-    setActivePage("embed");
+  const signIn = useCallback(async (email, password) => {
+    setSubmitting(true);
+    setLoginError(null);
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Sign-in failed (${res.status})`);
+
+      const next = { user: data.user, session: data.session };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      setAuth(next);
+      setActivePage("embed");
+    } catch (err) {
+      setLoginError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   }, []);
 
   const signOut = useCallback(() => {
     sessionStorage.removeItem(SESSION_KEY);
-    setSession(null);
+    setAuth(null);
+    setLoginError(null);
     // Drop the minted URL as well: leaving it around would keep the old
     // user's token alive in an iframe behind the login screen.
     setEmbedUrl(null);
@@ -172,16 +221,26 @@ export default function App() {
     setError(null);
   }, []);
 
-  const fetchEmbedUrl = useCallback(async (user) => {
+  const fetchEmbedUrl = useCallback(async (token) => {
     setIsLoading(true);
     setError(null);
     try {
+      // No user id in the body on purpose: the server reads the identity
+      // out of the session token, so the browser cannot ask for another
+      // account's data.
       const res = await fetch("/api/embed-token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: user.id }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: "{}",
       });
       const data = await res.json();
+      if (res.status === 401) {
+        // Expired or rejected session: back to the login screen rather
+        // than sitting on a page that will never load.
+        signOut();
+        setLoginError(data.error || "Your session has expired. Sign in again.");
+        return;
+      }
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       setEmbedUrl(data.embedUrl);
       setPayload(data.payload || null);
@@ -192,14 +251,22 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [signOut]);
 
   useEffect(() => {
-    if (session && activePage === "embed") fetchEmbedUrl(session);
-  }, [session, activePage, fetchEmbedUrl]);
+    if (auth?.session && activePage === "embed") fetchEmbedUrl(auth.session);
+  }, [auth, activePage, fetchEmbedUrl]);
 
   if (!session) {
-    return <LoginScreen users={users} onSignIn={signIn} loading={usersLoading} />;
+    return (
+      <LoginScreen
+        users={users}
+        onSignIn={signIn}
+        loading={usersLoading}
+        error={loginError}
+        submitting={submitting}
+      />
+    );
   }
 
   const navItem = (page, label, icon) => (

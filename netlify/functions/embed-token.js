@@ -1,15 +1,14 @@
-// Mints the embed token for a signed-in RetailFocus user.
+// Mints the embed token for the signed-in RetailFocus user.
 //
-// The login is a demo login: the browser posts a user id and the server
-// trusts it. That is fine for a sales demo and is NOT an auth system —
-// anyone who can reach this endpoint can request any persona's token. If
-// this ever fronts real data, put a real session in front of it and
-// derive the user from the session rather than the request body.
+// The identity comes from the session token, never from the request body.
+// That is the whole point of the login: without it, a POST to this
+// endpoint could name any persona and get that persona's data back.
 //
-// Both portals share one key/secret. Embed credentials are per-tenant,
-// so only object_name changes between an Explorer and a Viewer token.
+// Both portals share one key/secret. Embed credentials are per-tenant, so
+// only object_name changes between an Explorer and a Viewer token.
 import jwt from "jsonwebtoken";
-import { findUser, buildPayload, USERS } from "./_users.js";
+import { findUser, buildPayload } from "./_users.js";
+import { authConfigError, userIdFromRequest } from "./_auth.js";
 
 const HOST = process.env.HOLISTICS_HOST || "https://us.holistics.io";
 
@@ -20,29 +19,23 @@ const json = (statusCode, body) => ({
 });
 
 export const handler = async (event) => {
-  let userId;
-  try {
-    ({ user: userId } = JSON.parse(event.body || "{}"));
-  } catch {
-    return json(400, { error: "Body must be JSON: { user: '<id>' }" });
-  }
+  const configError = authConfigError();
+  if (configError) return json(500, { error: configError });
 
-  // Unknown id is an error rather than a silent fallback to the first
-  // persona. Falling back would show one user's data under another's
-  // name, which is the one failure this whole page is about.
+  const userId = userIdFromRequest(event.headers);
+  if (!userId) return json(401, { error: "Not signed in, or the session has expired. Sign in again." });
+
+  // A session that names a user who no longer exists (removed from the
+  // list, secret reused) is not a session worth honouring.
   const user = findUser(userId);
-  if (!user) {
-    return json(404, {
-      error: `Unknown user '${userId}'. Known users: ${USERS.map((u) => u.id).join(", ")}.`,
-    });
-  }
+  if (!user) return json(401, { error: "This session no longer matches a known account." });
 
-  const key = process.env.HOLISTICS_RETAILFOCUS_PORTAL_KEY;
-  const secret = process.env.HOLISTICS_RETAILFOCUS_PORTAL_SECRET;
+  const key = process.env.HOLISTICS_SHELFOPTIX_PORTAL_KEY;
+  const secret = process.env.HOLISTICS_SHELFOPTIX_PORTAL_SECRET;
   if (!key || !secret) {
     return json(500, {
       error:
-        "Missing HOLISTICS_RETAILFOCUS_PORTAL_KEY / _SECRET. Publish the portals, then Tools > Embedded Analytics > Enable to copy the Key ID and Secret.",
+        "Missing HOLISTICS_SHELFOPTIX_PORTAL_KEY / _SECRET. Publish the portals, then Tools > Embedded Analytics > Enable to copy the Key ID and Secret.",
     });
   }
 
