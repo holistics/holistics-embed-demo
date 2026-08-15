@@ -42,11 +42,9 @@ export const handler = async (event) => {
   const payload = buildPayload(user);
   const token = jwt.sign(payload, secret, { algorithm: "HS256" });
 
-  // The Standard view opens with the nav collapsed so it reads as a
-  // dashboard rather than a workspace; explorers keep the panel, which is
-  // how they reach the dataset and Ask AI.
-  const params = new URLSearchParams({ _token: token });
-  if (user.capability === "viewer") params.set("left_panel_state", "collapsed");
+  // Collapsed for everyone: the portal opens on the dashboard rather than
+  // a nav tree. Explorers still expand it to reach the dataset and Ask AI.
+  const params = new URLSearchParams({ _token: token, left_panel_state: "collapsed" });
 
   return json(200, {
     embedUrl: `${HOST}/embed/${key}?${params}`,

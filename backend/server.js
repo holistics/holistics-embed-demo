@@ -78,8 +78,7 @@ app.post("/api/embed-token", (req, res) => {
   const payload = buildPayload(user);
   const token = jwt.sign(payload, PORTAL_SECRET, { algorithm: "HS256" });
 
-  const params = new URLSearchParams({ _token: token });
-  if (user.capability === "viewer") params.set("left_panel_state", "collapsed");
+  const params = new URLSearchParams({ _token: token, left_panel_state: "collapsed" });
 
   res.json({ embedUrl: `${HOLISTICS_HOST}/embed/${PORTAL_KEY}?${params}`, payload });
 });
