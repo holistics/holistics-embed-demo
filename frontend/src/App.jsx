@@ -2,16 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 
 // --- Icons (Inline SVGs for zero dependencies) ---
 const Icons = {
-  Store: (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M2 7l1.5-4h17L22 7" /><path d="M4 7v13h16V7" /><path d="M2 7h20" /><path d="M9 20v-6h6v6" />
-    </svg>
-  ),
-  Factory: (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M2 20h20" /><path d="M4 20V9l6 4V9l6 4V6l4 2v12" />
-    </svg>
-  ),
   Grid: (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
@@ -33,23 +23,126 @@ const Icons = {
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
   ),
+  SignOut: (props) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  ),
 };
 
-// What each persona's embed token asserts (for the dev panel + reference table).
-function attrOf(user) {
-  return user?.type === "manufacturer"
-    ? { key: "manufacturer_id", value: user.manufacturer_id, portal: "shelfoptix_manufacturer_portal" }
-    : { key: "schema", value: user?.schema, portal: "shelfoptix_portal" };
+const SESSION_KEY = "shelfoptix.session";
+const ALL = "__ALL__";
+
+// Scope reads the same way everywhere: as the list, or as the word "All".
+const scopeText = (v) => (v === ALL ? "All" : Array.isArray(v) ? v.join(", ") : String(v ?? ""));
+
+function CapabilityBadge({ capability, label }) {
+  const explorer = capability === "explorer";
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${explorer ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-700"}`}>
+      {label || (explorer ? "Self-Serve (Explorer)" : "Standard/Traditional Dashboard View")}
+    </span>
+  );
+}
+
+// --- Login -----------------------------------------------------------
+// A dropdown of emails, as asked. This is a demo sign-in, not auth: the
+// server trusts the id the browser sends. Real deployment needs a session
+// in front of /api/embed-token.
+function LoginScreen({ users, onSignIn, loading }) {
+  // Derived, not synced: the field falls back to the first account until
+  // someone picks one, so there is no effect writing state on mount.
+  const [chosen, setChosen] = useState("");
+  const email = chosen || users[0]?.email || "";
+  const setEmail = setChosen;
+
+  const selected = users.find((u) => u.email === email);
+
+  return (
+    <div className="min-h-screen w-full bg-[#070d18] flex items-center justify-center p-6 font-sans">
+      <div className="w-full max-w-md">
+        <div className="flex items-center gap-3 justify-center mb-8">
+          <img src="https://storage.googleapis.com/shelfoptix_logos/apple-touch-icon.png" alt="ShelfOptix" className="w-10 h-10 rounded object-cover" />
+          <span className="text-white font-semibold text-2xl tracking-wide" style={{ fontFamily: "Barlow, sans-serif" }}>ShelfOptix Analytics</span>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-2xl p-8">
+          <h1 className="text-xl font-semibold text-slate-800">Sign in</h1>
+          <p className="text-sm text-slate-500 mt-1 mb-6">Choose an account to continue to RetailFocus.</p>
+
+          <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+          <select
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={!users.length}
+            className="w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white cursor-pointer disabled:opacity-50"
+          >
+            {users.map((u) => (
+              <option key={u.id} value={u.email}>{u.email}</option>
+            ))}
+          </select>
+
+          {/* What this account will actually see, before signing in. */}
+          {selected && (
+            <dl className="mt-5 space-y-2 text-sm bg-slate-50 border border-slate-200 rounded-md p-4">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Name</dt>
+                <dd className="text-slate-800 font-medium text-right">{selected.name}<span className="text-slate-400 font-normal"> · {selected.org}</span></dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">State</dt>
+                <dd className="text-slate-800 text-right">{scopeText(selected.states)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500 shrink-0">Departments</dt>
+                <dd className="text-slate-800 text-right">{scopeText(selected.depts)}</dd>
+              </div>
+              <div className="flex justify-between gap-4 items-center pt-1">
+                <dt className="text-slate-500">Access</dt>
+                <dd><CapabilityBadge capability={selected.capability} label={selected.capability_label} /></dd>
+              </div>
+            </dl>
+          )}
+
+          <button
+            onClick={() => selected && onSignIn(selected)}
+            disabled={!selected || loading}
+            className="mt-6 w-full py-2.5 bg-[#E63946] text-white text-sm font-semibold rounded-md hover:bg-[#d62839] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loading ? "Loading accounts…" : "Sign in"}
+          </button>
+
+          <p className="text-xs text-slate-400 mt-4 text-center">
+            Demo sign-in. No password: the account you pick becomes the embed identity.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
   const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  // The signed-in user. Restored from sessionStorage so a refresh does not
+  // bounce you back to the login screen.
+  const [session, setSession] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [activePage, setActivePage] = useState("embed"); // "embed" | "users" | "custom"
-  const [activeUser, setActiveUser] = useState(null);
   const [customEmbedUrl, setCustomEmbedUrl] = useState("");
   const [customEmbedLoaded, setCustomEmbedLoaded] = useState("");
 
   const [embedUrl, setEmbedUrl] = useState(null);
+  const [payload, setPayload] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isDevMode, setIsDevMode] = useState(false);
@@ -58,10 +151,25 @@ export default function App() {
   useEffect(() => {
     fetch("/api/config")
       .then((res) => res.json())
-      .then((data) => {
-        setUsers(data.users);
-        setActiveUser(data.users[0]);
-      });
+      .then((data) => setUsers(data.users || []))
+      .catch(() => setUsers([]))
+      .finally(() => setUsersLoading(false));
+  }, []);
+
+  const signIn = useCallback((user) => {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    setSession(user);
+    setActivePage("embed");
+  }, []);
+
+  const signOut = useCallback(() => {
+    sessionStorage.removeItem(SESSION_KEY);
+    setSession(null);
+    // Drop the minted URL as well: leaving it around would keep the old
+    // user's token alive in an iframe behind the login screen.
+    setEmbedUrl(null);
+    setPayload(null);
+    setError(null);
   }, []);
 
   const fetchEmbedUrl = useCallback(async (user) => {
@@ -74,24 +182,38 @@ export default function App() {
         body: JSON.stringify({ user: user.id }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       setEmbedUrl(data.embedUrl);
+      setPayload(data.payload || null);
     } catch (err) {
       setError(err.message);
       setEmbedUrl(null);
+      setPayload(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (activePage === "embed" && activeUser) fetchEmbedUrl(activeUser);
-  }, [activePage, activeUser, fetchEmbedUrl]);
+    if (session && activePage === "embed") fetchEmbedUrl(session);
+  }, [session, activePage, fetchEmbedUrl]);
 
-  const retailers = users.filter((u) => u.type === "retailer");
-  const manufacturers = users.filter((u) => u.type === "manufacturer");
+  if (!session) {
+    return <LoginScreen users={users} onSignIn={signIn} loading={usersLoading} />;
+  }
 
-  const attr = attrOf(activeUser);
+  const navItem = (page, label, icon) => (
+    <button
+      onClick={() => setActivePage(page)}
+      title={isSidebarCollapsed ? label : undefined}
+      className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
+        activePage === page ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+      }`}
+    >
+      {icon}
+      {!isSidebarCollapsed && label}
+    </button>
+  );
 
   return (
     <div className="flex h-screen w-full bg-slate-50 font-sans overflow-hidden">
@@ -103,41 +225,27 @@ export default function App() {
         </div>
 
         <nav className={`flex-1 ${isSidebarCollapsed ? "px-2" : "px-3"} space-y-1 mt-2 overflow-y-auto`}>
-          <button
-            onClick={() => setActivePage("embed")}
-            title={isSidebarCollapsed ? "Embedded Dashboard" : undefined}
-            className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2.5 rounded-md transition-colors text-sm font-medium ${
-              activePage === "embed" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-            }`}
-          >
-            <Icons.Grid className="w-5 h-5 shrink-0" />
-            {!isSidebarCollapsed && "Embedded Dashboard"}
-          </button>
-          <div className="space-y-1">
-            <button
-              onClick={() => setActivePage("users")}
-              title={isSidebarCollapsed ? "Users Reference" : undefined}
-              className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-md transition-colors text-sm font-medium ${
-                activePage === "users" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              <Icons.User className="w-4 h-4 shrink-0" />
-              {!isSidebarCollapsed && "Users Reference"}
-            </button>
-            <button
-              onClick={() => setActivePage("custom")}
-              title={isSidebarCollapsed ? "Custom Embed" : undefined}
-              className={`w-full flex items-center ${isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-md transition-colors text-sm font-medium ${
-                activePage === "custom" ? "bg-[#E63946] text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-              }`}
-            >
-              <Icons.Link className="w-4 h-4 shrink-0" />
-              {!isSidebarCollapsed && "Custom Embed"}
-            </button>
-          </div>
+          {navItem("embed", "RetailFocus", <Icons.Grid className="w-5 h-5 shrink-0" />)}
+          {navItem("users", "Users Reference", <Icons.User className="w-5 h-5 shrink-0" />)}
+          {navItem("custom", "Custom Embed", <Icons.Link className="w-5 h-5 shrink-0" />)}
         </nav>
 
-        <div className="p-4 border-t border-slate-700 space-y-2">
+        {/* Signed-in identity, so it is never ambiguous who the embed is for. */}
+        <div className="p-4 border-t border-slate-700 space-y-3">
+          {!isSidebarCollapsed && (
+            <div className="text-xs">
+              <div className="text-white font-medium">{session.name}</div>
+              <div className="text-slate-400 break-all">{session.email}</div>
+            </div>
+          )}
+          <button
+            onClick={signOut}
+            title={isSidebarCollapsed ? "Sign out" : undefined}
+            className={`flex items-center ${isSidebarCollapsed ? "justify-center w-full" : "gap-2"} text-sm text-slate-300 hover:text-white transition-colors`}
+          >
+            <Icons.SignOut className="w-4 h-4" />
+            {!isSidebarCollapsed && "Sign out"}
+          </button>
           {!isSidebarCollapsed && (
             <button onClick={() => setIsDevMode(!isDevMode)} className="flex items-center gap-2 text-sm text-slate-300 hover:text-white transition-colors">
               <Icons.Code className="w-4 h-4" />
@@ -161,30 +269,18 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm z-10">
           <h1 className="text-xl font-semibold text-slate-800">
-            {activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : `${activeUser?.name || ""}`}
-            {activePage === "embed" && activeUser && (
-              <span className={`ml-3 px-2 py-0.5 rounded text-xs font-medium align-middle ${activeUser.type === "manufacturer" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>
-                {activeUser.type}
-              </span>
-            )}
+            {activePage === "users" ? "Users Reference" : activePage === "custom" ? "Custom Embed" : "RetailFocus"}
           </h1>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500">Viewing as:</span>
-              <select
-                value={activeUser?.id || ""}
-                onChange={(e) => { setActivePage("embed"); setActiveUser(users.find((u) => u.id === e.target.value)); }}
-                className="block w-60 rounded-md border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-1.5 pl-3 pr-8 bg-slate-50 cursor-pointer"
-              >
-                <optgroup label="Retailers">
-                  {retailers.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
-                </optgroup>
-                <optgroup label="Manufacturers">
-                  {manufacturers.map((user) => (<option key={user.id} value={user.id}>{user.name}</option>))}
-                </optgroup>
-              </select>
-            </div>
-            <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600">
+            {activePage === "embed" && (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-slate-500">
+                  {scopeText(session.states)} · {session.depts === ALL ? "All departments" : `${session.depts.length} departments`}
+                </span>
+                <CapabilityBadge capability={session.capability} label={session.capability_label} />
+              </div>
+            )}
+            <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600" title={session.email}>
               <Icons.User className="w-4 h-4" />
             </div>
           </div>
@@ -217,33 +313,32 @@ export default function App() {
                 </div>
               </div>
             ) : activePage === "users" ? (
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-5xl mx-auto">
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
                   <thead>
                     <tr className="bg-[#070d18] text-white text-left">
-                      <th className="px-6 py-3 font-semibold">Name</th>
-                      <th className="px-6 py-3 font-semibold">Type</th>
-                      <th className="px-6 py-3 font-semibold">Token attribute</th>
-                      <th className="px-6 py-3 font-semibold">Value</th>
+                      <th className="px-5 py-3 font-semibold">Name</th>
+                      <th className="px-5 py-3 font-semibold">Credentials</th>
+                      <th className="px-5 py-3 font-semibold">State</th>
+                      <th className="px-5 py-3 font-semibold">Dept Description</th>
+                      <th className="px-5 py-3 font-semibold">Agentic Capability</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {users.map((user) => {
-                      const a = attrOf(user);
-                      return (
-                        <tr key={user.id} className="hover:bg-slate-50">
-                          <td className="px-6 py-3">{user.name}</td>
-                          <td className="px-6 py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.type === "manufacturer" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"}`}>{user.type}</span>
-                          </td>
-                          <td className="px-6 py-3 font-mono text-xs">{a.key}</td>
-                          <td className="px-6 py-3 font-mono text-xs">{a.value}</td>
-                        </tr>
-                      );
-                    })}
+                    {users.map((user) => (
+                      <tr key={user.id} className={`hover:bg-slate-50 ${user.id === session.id ? "bg-amber-50" : ""}`}>
+                        <td className="px-5 py-3 font-medium whitespace-nowrap">{user.name}</td>
+                        <td className="px-5 py-3 font-mono text-xs">{user.email}</td>
+                        <td className="px-5 py-3 whitespace-nowrap">{scopeText(user.states)}</td>
+                        <td className="px-5 py-3 text-xs">{scopeText(user.depts)}</td>
+                        <td className="px-5 py-3"><CapabilityBadge capability={user.capability} label={user.capability_label} /></td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-                <p className="text-xs text-slate-400 mt-3">Retailers route to their own BigQuery dataset via <span className="font-mono">schema</span> (dynamic schema). Manufacturers see the cross-retailer union scoped by <span className="font-mono">manufacturer</span> (grants + RLP).</p>
+                <p className="text-xs text-slate-400 mt-3">
+                  State and Dept Description ride in the token as the <span className="font-mono">store_state</span> and <span className="font-mono">dept</span> user attributes, and are enforced by row-level permission on the dataset. <span className="font-mono">All</span> is sent as <span className="font-mono">__ALL__</span>, which bypasses that one rule. Agentic Capability picks the portal: Explorer users get the dataset alongside the dashboard, so they can build their own analysis.
+                </p>
               </div>
             ) : (
               <div className="max-w-6xl mx-auto h-full flex flex-col">
@@ -266,8 +361,8 @@ export default function App() {
                       </div>
                     )}
                     {error && (
-                      <div className="absolute inset-0 flex items-center justify-center text-red-500 text-sm px-6 text-center">
-                        Error: {error}. Make sure the backend is running on port 3001 and the portal keys/secrets are set.
+                      <div className="absolute inset-0 flex items-center justify-center text-red-600 text-sm px-10 text-center">
+                        {error}
                       </div>
                     )}
                     {embedUrl && (
@@ -279,7 +374,7 @@ export default function App() {
             )}
           </main>
 
-          {/* Payload Panel */}
+          {/* Payload Panel — the token the server actually signed. */}
           {isDevMode && (
             <aside className="w-[420px] bg-[#0a192f] text-slate-300 border-l border-slate-800 flex flex-col z-20 shadow-2xl">
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-[#051024]">
@@ -291,18 +386,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto p-4 font-mono text-xs">
                 <div className="bg-[#051024] p-4 rounded border border-slate-800 overflow-x-auto">
-                  <pre className="text-slate-300">{JSON.stringify(
-                    {
-                      object_name: attr.portal,
-                      object_type: "EmbedPortal",
-                      embed_user_id: activeUser?.id,
-                      embed_user_email: activeUser?.email,
-                      user_attributes: { [attr.key]: [attr.value] },
-                      permissions: {},
-                      settings: { ai: { enabled: true }, allow_dashboard_export: true, allow_raw_data_export: false },
-                      exp: "Math.floor(Date.now() / 1000) + 3600",
-                    },
-                    null, 2)}</pre>
+                  <pre className="text-slate-300">{payload ? JSON.stringify(payload, null, 2) : "Sign in and open the RetailFocus tab to mint a token."}</pre>
                 </div>
               </div>
             </aside>

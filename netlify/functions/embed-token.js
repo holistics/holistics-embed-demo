@@ -1,75 +1,63 @@
+// Mints the embed token for a signed-in RetailFocus user.
+//
+// The login is a demo login: the browser posts a user id and the server
+// trusts it. That is fine for a sales demo and is NOT an auth system —
+// anyone who can reach this endpoint can request any persona's token. If
+// this ever fronts real data, put a real session in front of it and
+// derive the user from the session rather than the request body.
+//
+// Both portals share one key/secret. Embed credentials are per-tenant,
+// so only object_name changes between an Explorer and a Viewer token.
 import jwt from "jsonwebtoken";
+import { findUser, buildPayload, USERS } from "./_users.js";
 
-// Personas — mirrors backend/server.js.
-const USERS = [
-  { id: "cascade",     type: "retailer",     name: "Cascade Foods Co.",   email: "analytics@cascadefoods.com", schema: "shelfoptix_retailer_101" },
-  { id: "marketfresh", type: "retailer",     name: "MarketFresh Grocery", email: "insights@marketfresh.com",   schema: "shelfoptix_retailer_102" },
-  { id: "pureharvest", type: "retailer",     name: "PureHarvest Brands",  email: "analytics@pureharvest.com",  schema: "shelfoptix_retailer_103" },
-  { id: "pg",          type: "manufacturer", name: "Procter & Gamble",    email: "analytics@pg.com",           manufacturer_id: 1 },
-  { id: "unilever",    type: "manufacturer", name: "Unilever",            email: "analytics@unilever.com",     manufacturer_id: 2 },
-  { id: "nestle",      type: "manufacturer", name: "Nestlé",              email: "analytics@nestle.com",       manufacturer_id: 3 },
-  { id: "pepsico",     type: "manufacturer", name: "PepsiCo",             email: "analytics@pepsico.com",      manufacturer_id: 4 },
-];
+const HOST = process.env.HOLISTICS_HOST || "https://us.holistics.io";
 
-// Retailer + manufacturer portals are separate embed objects; the token's object_name
-// selects which. Each has its own key/secret from the Holistics UI embed settings.
-function portalFor(user) {
-  return user.type === "manufacturer"
-    ? {
-        object: "shelfoptix_manufacturer_portal",
-        key: process.env.HOLISTICS_MANUFACTURER_PORTAL_KEY,
-        secret: process.env.HOLISTICS_MANUFACTURER_PORTAL_SECRET,
-      }
-    : {
-        object: "shelfoptix_portal",
-        key: process.env.HOLISTICS_RETAILER_PORTAL_KEY || process.env.HOLISTICS_PORTAL_EMBED_KEY,
-        secret: process.env.HOLISTICS_RETAILER_PORTAL_SECRET || process.env.HOLISTICS_PORTAL_EMBED_SECRET,
-      };
-}
-
-function buildPortalPayload(user, objectName) {
-  const user_attributes =
-    user.type === "manufacturer"
-      ? { manufacturer_id: [user.manufacturer_id] }
-      : { schema: [user.schema] };
-
-  return {
-    object_name: objectName,
-    object_type: "EmbedPortal",
-    embed_user_id: user.id,
-    embed_user_email: user.email,
-    user_attributes,
-    permissions: {},
-    settings: {
-      ai: { enabled: true },
-      allow_dashboard_export: true,
-      allow_raw_data_export: false,
-      default_timezone: null,
-      allow_dashboard_timezone_change: false,
-      hide_dashboard_filters_controls_panel: false,
-      dashboard_autorun_on_changes: false,
-      // Let embedded users force-refresh past the 10-min query cache (near real-time).
-      allow_public_user_bust_cache: true,
-    },
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
-}
+const json = (statusCode, body) => ({
+  statusCode,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
 
 export const handler = async (event) => {
-  const { user: userId } = JSON.parse(event.body || "{}");
-  const user = USERS.find((u) => u.id === userId) || USERS[0];
-  const portal = portalFor(user);
-
-  if (!portal.key || !portal.secret) {
-    return {
-      statusCode: 500,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ error: `Missing embed key/secret for ${user.type} portal.` }),
-    };
+  let userId;
+  try {
+    ({ user: userId } = JSON.parse(event.body || "{}"));
+  } catch {
+    return json(400, { error: "Body must be JSON: { user: '<id>' }" });
   }
 
-  const token = jwt.sign(buildPortalPayload(user, portal.object), portal.secret, { algorithm: "HS256" });
-  const embedUrl = `https://demo4.holistics.io/embed/${portal.key}?_token=${token}&left_panel_state=collapsed`;
-  return { statusCode: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ embedUrl }) };
+  // Unknown id is an error rather than a silent fallback to the first
+  // persona. Falling back would show one user's data under another's
+  // name, which is the one failure this whole page is about.
+  const user = findUser(userId);
+  if (!user) {
+    return json(404, {
+      error: `Unknown user '${userId}'. Known users: ${USERS.map((u) => u.id).join(", ")}.`,
+    });
+  }
+
+  const key = process.env.HOLISTICS_RETAILFOCUS_PORTAL_KEY;
+  const secret = process.env.HOLISTICS_RETAILFOCUS_PORTAL_SECRET;
+  if (!key || !secret) {
+    return json(500, {
+      error:
+        "Missing HOLISTICS_RETAILFOCUS_PORTAL_KEY / _SECRET. Publish the portals, then Tools > Embedded Analytics > Enable to copy the Key ID and Secret.",
+    });
+  }
+
+  const payload = buildPayload(user);
+  const token = jwt.sign(payload, secret, { algorithm: "HS256" });
+
+  // Viewers open on the dashboard with the nav collapsed; explorers get
+  // the panel so they can reach the dataset.
+  const params = new URLSearchParams({ _token: token });
+  if (user.capability === "viewer") params.set("left_panel_state", "collapsed");
+
+  return json(200, {
+    embedUrl: `${HOST}/embed/${key}?${params}`,
+    // Echoed so the dev panel shows what was actually signed rather than
+    // a hand-written guess at it.
+    payload,
+  });
 };
