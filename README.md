@@ -389,6 +389,11 @@ What to check:
 
 ## Running this example
 
+> Picking this project up rather than learning the pattern? Read
+> **[HANDOVER.md](./HANDOVER.md)** — current state, what to work on next, and
+> the gotchas specific to this codebase.
+
+
 ```bash
 npm install
 npm run server     # API on :3001, reads .env
