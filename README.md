@@ -32,7 +32,7 @@ The important part: **your app tells Holistics who the user is, and Holistics de
 
 This is the decision that shapes everything, and the one most likely to cost you a rebuild. Ask:
 
-> **What combination of things decides which rows a user can see?**
+> **What combination of dimensions decides which rows a user can see?**
 
 Write your answer down before modelling. If it is a single attribute on a single dimension, the rest of this guide is easy. If it is two attributes at different grains, read [Step 2](#step-2-build-the-access-dimension) carefully.
 
@@ -40,7 +40,7 @@ Write your answer down before modelling. If it is a single attribute on a single
 
 ## Step 1: Create your user attributes
 
-After define the things that you use to see, then In Holistics, go to **Admin → User Attributes** and create one per scope. Example:
+After define the dimensions that you use to see, then In Holistics, go to **Admin → User Attributes** and create one per scope. Example:
 
 | Attribute | Example value |
 |---|---|
@@ -170,8 +170,6 @@ Two things to check. First, that `.env` is actually ignored — and that variant
 Values containing `#` need quoting, or `.env` treats the rest of the line as a comment and silently truncates the value. The result is a secret that looks correct in the file and fails at runtime.
 
 **Hosted.** Use your platform's own secret store — environment variables in the hosting provider, or a secrets manager. The deploy artefact should never contain them. This is what keeps the app working when your laptop is off, and it means rotating a secret does not require a code change.
-
-**Sharing passwords with real users.** Use a password manager's share feature rather than email or chat: it can expire, and it can be locked to a recipient's address. If you use 1Password, `op item share <item> --emails a@b.com --expires-in 30d` does both. Keep the *server* secrets in a different item from anything you share with users — they are for the application, not for people.
 
 **What not to do:** commit any of them, put them in the frontend, paste them into a ticket, or share the embed secret with someone who only needs to log in.
 
