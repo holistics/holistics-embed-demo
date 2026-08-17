@@ -1,202 +1,457 @@
-# Holistics Embed Demo
+# Building an Embedded Analytics Portal with Holistics
 
-A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
+A build guide: how to put a Holistics dashboard inside your own application, with each user seeing only the data they are allowed to see — enforced by the database, not by hiding things in the UI.
 
-> **This branch runs locally only. Do not deploy it.**
-> The password check is stubbed — *any* value signs you in, including an
-> empty one. Hosted, that hands any visitor the Masterview account, which
-> sees every state and every department.
-> `shelfoptix-embed-demo.netlify.app` serves the demo4 retailer/manufacturer
-> demo, not this app. Deploying this branch would take that site over. The
-> RetailFocus portal it embeds is a customer POC behind a shared password,
-> so it is run on a laptop for a demo and shut down afterwards.
+**Time:** a day for a working version. **You need:** SQL, a little JavaScript, and admin access to a Holistics workspace.
 
-![](./holistics-embed-demo.png)
+This guide follows a real build — the ShelfOptix RetailFocus programme, reporting on ~560 Dollar General stores for P&G. Four users, each scoped to their own states and product departments. The examples come from that build; the shape applies to any of them.
 
-## Tech Stack
+---
 
-- **Frontend**: React, Vite, Tailwind CSS
-- **Backend**: Node.js, Express, `jsonwebtoken`
-- **Runs**: locally — Vite dev server plus an Express API on :3001
-
-## Project Structure
+## What you are building
 
 ```
-├── backend/
-│   └── server.js            # Express API server (local dev)
-├── frontend/
-│   ├── functions/api/        # legacy Cloudflare Pages copy — unused
-│   ├── src/                  # React app source
-│   ├── public/               # Static assets
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   └── eslint.config.js
-├── functions/                # legacy Cloudflare Pages copy — unused
-├── netlify/functions/        # the API: login, embed-token, config, shared helpers
-└── package.json
+  Your app                    Your server                    Holistics
+  ────────                    ───────────                    ─────────
+  user signs in  ─────────►   verifies them
+                              signs a JWT with their scope
+                                      │
+  <iframe> ◄────────────────  embed URL + token  ─────────►  Embed Portal
+                                                                  │
+                                                             Dataset
+                                                                  │
+                                                    row-level permissions
+                                                    filter every query
 ```
 
-## RetailFocus users
+The important part: **your app tells Holistics who the user is, and Holistics decides what they can see.** Your app never filters data. It cannot be tricked into showing the wrong rows, because it was never in charge of that.
 
-Sign-in is a dropdown of emails. The account chosen becomes the embed
-identity; there is no password.
+---
 
-| Name | Credentials | State | Dept Description | Agentic Capability |
-| --- | --- | --- | --- | --- |
-| Amit | amarty@shelfoptix.com | GA | HOME CLEANING, PAPER PRODUCTS, HOUSEWARE, HARDWARE, SUMMER/SPECIAL EVENTS | Self-Serve (Explorer) |
-| Randy | rwilson@retailgis.com | TN, KY | HOME CLEANING, PAPER PRODUCTS, HOUSEWARE, HARDWARE, SUMMER/SPECIAL EVENTS | Self-Serve (Explorer) |
-| Myri | mdiazmartinez@shelfoptix.com | GA, TN, KY | BEAUTY CARE, HEALTH CARE, INF/TODD/GIRLS | Standard/Traditional Dashboard View |
-| Masterview | mv@shelfoptix.com | All | All | Self-Serve (Explorer) |
+## Before you write anything: decide your scope grain
 
-The list lives in `netlify/functions/_users.js` and nowhere else. Both
-functions and the local dev server import it.
+This is the decision that shapes everything, and the one most likely to cost you a rebuild. Ask:
 
-**How the three columns become an embed**
+> **What combination of things decides which rows a user can see?**
 
-- **State** → `store_state` user attribute.
-- **Dept Description** → `dept` user attribute.
-- **All** → `__ALL__`, the documented bypass for one attribute, which is
-  how Masterview sees everything without a special case.
+For us it was **state** *and* **department**. Two attributes at completely different grains — a state belongs to a store, a department belongs to a product. That mismatch drove the entire model design, and we got it wrong three times before getting it right.
 
-Both attributes are enforced by row-level permission on the
-`shelfoptix_pg_ai` dataset. Two prerequisites, both outside this repo:
-RLP-as-code has to be enabled on the tenant by Holistics support, and the
-`store_state` and `dept` user attributes have to exist in
-**Admin → User Attributes** with exactly those names. Until then the
-attributes ride in the token but nothing filters on them.
+Write your answer down before modelling. If it is a single attribute on a single dimension, the rest of this guide is easy. If it is two attributes at different grains, read [Step 3](#step-3-build-the-access-dimension) carefully — that step exists for exactly this case.
 
-- **Agentic Capability** → which portal the token names. Self-serve
-  exploration is a property of the portal, not of the token: a portal
-  that lists the dataset allows exploration, one that lists only the
-  dashboard does not. There is no per-user flag for it.
+---
 
-  | Capability | Portal | Contains |
-  | --- | --- | --- |
-  | Self-Serve (Explorer) | `retailfocus_explorer` | dashboard + dataset |
-  | Standard/Traditional | `retailfocus_viewer` | dashboard only |
+## Step 1: Model your data
 
-  On top of that the token varies `settings.ai.enabled` and the workspace
-  permissions, so Explorers can save their own work and Viewers cannot.
+Start with a normal star schema. Facts join to dimensions; dimensions do not join to each other.
 
-**How sign-in works**
+```aml
+Dataset shelfoptix_pg_ai {
+  models: [
+    store_meta,        // dimension: one row per store
+    sales_detail,      // fact: what sold
+    onhand_detail      // fact: what is in stock
+  ]
 
-The password is **not checked** — any value signs you in, empty included.
-The field is still on screen because the demo is partly about showing a
-host app authenticating a user, but only the comparison is stubbed.
+  relationships: [
+    relationship(sales_detail.store_no  > store_meta.store_no, true, 'one_way'),
+    relationship(onhand_detail.store_no > store_meta.store_no, true, 'one_way')
+  ]
+}
+```
 
-1. `POST /api/login` with `{ email, password }`. A wrong password and an
-   unknown email return the same 401, so the endpoint cannot be used to
-   discover which accounts exist.
-2. On success it returns a session token signed with
-   `SHELFOPTIX_SESSION_SECRET`, valid 8 hours.
-3. `POST /api/embed-token` requires that token in an `Authorization:
-   Bearer` header and reads the identity **out of the token**, ignoring
-   the request body entirely.
+`one_way` means the dimension filters the fact, never the reverse. It is the right default and it keeps nonsense combinations out of the field list.
 
-Step 3 is the part that matters. A password screen alone would change
-nothing, because anyone could still POST to the token endpoint and name
-whichever persona they liked. Deriving the identity from something the
-server signed is what makes the scope real.
+### When the source data cannot answer the question
 
-**It is still demo-grade.** One shared password, no per-user credentials,
-no lockout, no rate limiting, and no revocation beyond rotating
-`SHELFOPTIX_SESSION_SECRET`. It is enough that a link to the site is not
-a link to the data, and no more than that.
+Do not force it in AQL. Write a query model — a model whose source is SQL you control:
 
-## Getting Started
+```aml
+Model order_lines {
+  type: 'query'
+  data_source_name: 'your_connection'
 
-### 1. Install dependencies
+  dimension store_no { type: 'number' definition: @sql {{ #SOURCE.store_no }};; }
+  // ... one dimension per output column
+
+  query: @sql
+    select s.store_no, s.primary_sku_no, sum(s.units) as units
+    from sales s
+    join onhand o using (store_no, primary_sku_no)
+    group by 1, 2
+  ;;
+}
+```
+
+We needed this twice: once to join sales and on-hand at store × SKU (the two views only met at store level), and once to pre-compute a peer benchmark. Doing the join in SQL avoided a whole class of problem — no computed join keys, no relationship ordering, nothing added to the source models.
+
+> **Watch out.** We first tried a computed dimension on a source model and used it in a relationship. It validated locally and failed in the cloud with `Field pair_key not found in model ...`, because the dataset reached the server before the edited model did. SQL sidesteps it.
+
+---
+
+## Step 2: Create your user attributes
+
+In Holistics, go to **Admin → User Attributes** and create one per scope. Ours:
+
+| Attribute | Example value |
+|---|---|
+| `store_state` | `GA` |
+| `dept` | `HOME CLEANING` |
+
+The names matter — they must match the permission definitions exactly, and the keys your app puts in the token.
+
+Confirm they exist before going further. The CLI tells you:
+
+```bash
+holistics aml validate
+# Use 5 user attribute(s) on server: store_state, dept, h_email, h_role, h_name
+```
+
+`h_email`, `h_role` and `h_name` are built in. If your two are not listed, the permissions will silently do nothing.
+
+> **Also:** row-level permission as code is **off by default**. Ask Holistics support to enable it for your workspace, or your permission blocks will be ignored.
+
+---
+
+## Step 3: Build the access dimension
+
+Here is the rule that governs everything, and it is not obvious:
+
+> **Every model in a query must be able to reach the model your permission sits on.**
+>
+> If it cannot, Holistics does not skip the rule — it **blocks the widget**, because returning rows it cannot prove are in scope would be a leak.
+
+If you scope by one attribute that lives on one dimension every fact joins to, you are already fine: put the permission there and skip to [Step 4](#step-4-add-the-permissions).
+
+If you scope by **two attributes at different grains**, you need a dimension sitting at the grain where both questions can be answered. We learned this the expensive way:
+
+| We put the permission on | What broke |
+|---|---|
+| Each fact table | A query over sales cannot reach a rule on on-hand — facts join to dimensions, never to each other. Everything blocked. |
+| A product dimension | Facts fine. Every widget showing a store column blocked. |
+| A department dimension | Tiles fine. Every table with store attributes blocked. |
+| **A store × department dimension** | **Works** |
+
+So build one row per combination:
+
+```aml
+Model dim_store_dept {
+  type: 'query'
+
+  dimension scope_key       { type: 'text' primary_key: true
+    definition: @sql {{ #SOURCE.scope_key }};; }
+  dimension store_state     { type: 'text' definition: @sql {{ #SOURCE.store_state }};; }
+  dimension dept            { type: 'text' definition: @sql {{ #SOURCE.dept }};; }
+  dimension store_group_a_b { type: 'text' definition: @sql {{ #SOURCE.store_group_a_b }};; }
+  dimension store_city      { type: 'text' definition: @sql {{ #SOURCE.store_city }};; }
+
+  query: @sql
+    with depts as (
+      select distinct dept_description as dept from sales where dept_description is not null
+    ),
+    stores as (
+      select store_no,
+             max(store_state)      as store_state,
+             max(store_city)       as store_city,
+             max(store_group_a_b)  as store_group_a_b
+      from store_meta group by store_no
+    )
+    select concat(cast(s.store_no as string), '|', d.dept) as scope_key,
+           s.store_no, d.dept, s.store_state, s.store_city, s.store_group_a_b
+    from stores s cross join depts d
+  ;;
+}
+```
+
+Relationships join on a **single column**, so pair your two keys into one. Declare that key in the dataset, which means you never edit the source models:
+
+```aml
+  dimension sales_scope_key {
+    type: 'text'
+    hidden: true
+    definition: @aql concat(cast(sales.store_no, 'text'), '|', sales.dept_description) ;;
+    model: sales
+  }
+
+  relationships: [
+    relationship(sales.sales_scope_key > dim_store_dept.scope_key, true, 'one_way')
+    // ... one per fact
+  ]
+```
+
+### The part everyone misses
+
+**Put every attribute your dashboard filters on into this dimension too** — not only the scoped ones.
+
+We had an A/B Cohort filter reading `store_group_a_b` off the store dimension. That one filter pulled the store dimension into *every query on the page*, which made the department permission unreachable everywhere, no matter where the other columns came from. Moving the filter onto the access dimension fixed it.
+
+If a filter or a table column reads a model that cannot reach your permission, that widget breaks. Check every one.
+
+---
+
+## Step 4: Add the permissions
+
+At dataset level, next to `models` and `relationships`:
+
+```aml
+Dataset shelfoptix_pg_ai {
+  models: [ ... ]
+
+  permission state_scope {
+    field: r(dim_store_dept.store_state)
+    operator: 'matches_user_attribute'
+    value: 'store_state'          // the ATTRIBUTE name, as a string
+  }
+  permission dept_scope {
+    field: r(dim_store_dept.dept)
+    operator: 'matches_user_attribute'
+    value: 'dept'
+  }
+
+  relationships: [ ... ]
+}
+```
+
+`value` is the user attribute's name, not a value. `field` is what gets filtered.
+
+### Giving someone full access
+
+Send the string `__ALL__` instead of a list and that one rule is bypassed:
+
+```js
+user_attributes: {
+  store_state: "__ALL__",              // sees every state
+  dept: ["HOME CLEANING", "HARDWARE"]  // still scoped by department
+}
+```
+
+That is how an admin account works without a second portal or a special case anywhere in your code.
+
+---
+
+## Step 5: Define the embed portal
+
+A portal is what your users land in. One file, named `*.embed.aml`:
+
+```aml
+EmbedPortal retailfocus_portal {
+  description: 'RetailFocus: dashboard plus the dataset behind it.'
+  objects: [
+    shelfoptix_retailfocus,   // a dashboard
+    shelfoptix_pg_ai,         // a dataset
+  ]
+  initial_object: 'ai'
+  ai {
+    customization {
+      global { assistant_name: 'RetailFocus Assistant' icon: 'https://.../icon.png' }
+      chat_page {
+        prompt_placeholder: 'e.g. Which store has the most untapped value?'
+      }
+    }
+  }
+}
+```
+
+Three things worth knowing:
+
+- **Listing a dataset enables self-serve exploration and Ask AI on it.** Omit the dataset and users get dashboards only. There is no per-user switch — it is a property of the portal.
+- **`initial_object`** is where users land: `'ai'` for the assistant, or a dashboard name.
+- **One `EmbedPortal` per file.** Two in one file and the object will not resolve — you get `Couldn't find EmbedPortal` even after publishing.
+
+> **`ai { enabled: true }` does not exist.** The `ai` block is customization only. AI is switched on per user in the token (Step 7), and must also be enabled for your workspace.
+
+---
+
+## Step 6: Publish, then get your credentials
+
+**Embed objects and permissions resolve against production, not your development branch.**
+
+```bash
+holistics aml validate     # always, before publishing
+```
+
+Then hit **Publish** in the Studio. Until you do:
+
+- the portal 404s with `Couldn't find EmbedPortal`
+- permission changes appear not to work, because production still has the old ones
+
+We lost hours to this. If behaviour does not match your code, **check what is published before debugging anything else.**
+
+Then **Tools → Embedded Analytics**, find your portal, click **Enable**, and copy the **Key ID** and **Secret**. One credential pair covers every portal in the workspace — they are per-tenant, not per-portal.
+
+---
+
+## Step 7: Mint the token in your app
+
+Server-side only. The secret must never reach the browser.
+
+```js
+import jwt from "jsonwebtoken";
+
+const now = Math.floor(Date.now() / 1000);
+
+const payload = {
+  object_name: "retailfocus_portal",
+  object_type: "EmbedPortal",
+
+  embed_user_id: user.id,          // stable per person: keys their saved work
+  embed_user_email: user.email,
+  embed_org_id: user.orgId,        // the shared-workspace boundary
+
+  user_attributes: {               // ← what the permissions match against
+    store_state: user.states,      // ["GA"] or "__ALL__"
+    dept: user.depts,
+  },
+
+  permissions: {
+    enable_personal_workspace: true,
+    org_workspace_role: "editor",  // no_access | viewer | editor
+  },
+
+  settings: {
+    ai: { enabled: true },
+    allow_dashboard_export: true,
+    allow_raw_data_export: false,
+  },
+
+  iat: now,
+  exp: now + 3600,
+};
+
+const token = jwt.sign(payload, EMBED_SECRET, { algorithm: "HS256" });
+const url = `https://your-tenant.holistics.io/embed/${EMBED_KEY}?_token=${token}&left_panel_state=collapsed`;
+```
+
+Then render `<iframe src={url}>`.
+
+### What you can and cannot control per user
+
+| Per user, in the token | Portal-level only |
+|---|---|
+| `user_attributes` — which rows | Which dashboards and datasets exist |
+| `settings.ai.enabled` | Whether exploration is possible at all |
+| `permissions.enable_personal_workspace` | |
+| `permissions.org_workspace_role` | |
+| export and timezone settings | |
+
+> **`org_workspace_role` does nothing without `embed_org_id`.** We set the role for a week before noticing it was inert. Users sharing an `embed_org_id` can see each other's shared dashboards; different ids are isolated.
+
+---
+
+## Step 8: Do not let the browser choose the identity
+
+The most common mistake, and we made it first:
+
+```js
+// WRONG — the browser says who it is
+app.post("/api/embed-token", (req, res) => {
+  const user = findUser(req.body.user);   // anyone can ask for any account
+  res.json({ embedUrl: mint(user) });
+});
+```
+
+Anyone can POST to that endpoint naming any user and get their data. A login screen in front of it changes nothing.
+
+```js
+// RIGHT — the server says who it is
+app.post("/api/login", (req, res) => {
+  const user = authenticate(req.body.email, req.body.password);
+  if (!user) return res.status(401).json({ error: "That email and password do not match." });
+  res.json({ session: jwt.sign({ sub: user.id }, SESSION_SECRET, { expiresIn: "8h" }) });
+});
+
+app.post("/api/embed-token", (req, res) => {
+  const userId = verifySession(req.headers.authorization);   // identity from the signature
+  if (!userId) return res.status(401).json({ error: "Not signed in." });
+  res.json({ embedUrl: mint(findUser(userId)) });            // request body ignored
+});
+```
+
+Test it: sign in as a restricted user, then POST to `/api/embed-token` asking for the admin account. You should get the restricted user's token back.
+
+Two smaller things worth copying: return the **same** 401 for a wrong password and an unknown email, so the endpoint cannot be used to discover which accounts exist; and compare passwords in constant time over hashes.
+
+---
+
+## Step 9: Test as a real user
+
+> **Row-level permissions never apply to Admins, or to Analysts with data source access.**
+
+You cannot test this from your own account. It will look like nothing is filtered and you will conclude it is broken. Open the embed as an actual embed user.
+
+What to check:
+
+1. A scoped user and an unscoped user return **different numbers** on the same tile
+2. The scoped user's tables show only their rows
+3. No widget shows a permission error
+4. The scoped user's totals are **lower** than the unscoped user's — if they are higher, something is reading an unscoped path
+
+---
+
+## Running this example
 
 ```bash
 npm install
+npm run server     # API on :3001, reads .env
+npm run dev        # app on https://localhost:5173
 ```
 
-### 2. Configure environment variables
-
-Create a `.env` file in the project root:
+Accept the self-signed certificate warning. `.env` needs:
 
 ```env
-HOLISTICS_SHELFOPTIX_PORTAL_KEY=your_embed_key_here
-HOLISTICS_SHELFOPTIX_PORTAL_SECRET=your_embed_secret_here
-HOLISTICS_HOST=https://us.holistics.io
-
-# Shared sign-in password for the four accounts, and the key that signs
-# session tokens. Both are required; the app refuses to mint an embed
-# token without them.
-SHELFOPTIX_DEMO_PASSWORD='...'
-SHELFOPTIX_SESSION_SECRET=...
+HOLISTICS_SHELFOPTIX_PORTAL_KEY=...
+HOLISTICS_SHELFOPTIX_PORTAL_SECRET=...
+SHELFOPTIX_SESSION_SECRET=...          # openssl rand -hex 48
+HOLISTICS_HOST=https://your-tenant.holistics.io
 ```
 
-One key/secret covers both portals: embed credentials are per-tenant, not
-per-portal, so the token only swaps `object_name` between them.
+> **This example runs locally only. Do not deploy it.** The password check is stubbed — any value signs you in, empty included. Hosted, that would hand any visitor the account with the widest access.
 
-To get them: publish the portal from the `shelfoptix-poc-aml` project, then
-**Tools → Embedded Analytics**, find `retailfocus_portal`, click **Enable**,
-and copy the Key ID and Secret. These live in `.env` on the machine running
-the demo and nowhere else.
+---
 
-Quote the password. `.env` treats an unquoted `#` as the start of a
-comment, which silently truncates the value and produces a password that
-looks right in the file and fails at the login screen.
+## Troubleshooting
 
-Generate the session secret with `openssl rand -hex 48`. Changing it
-signs everyone out, which is the only revocation this demo has.
+**`Some permission rules are not applied in the explore ... check RLP on the following model: X`**
+A model in the query cannot reach the permission. The message names a model involved in the mismatch, not necessarily the culprit. List every model the widget touches — including ones pulled in by *filters* — and ask which cannot reach your permission's model. Usually it is a dimension that has no business joining to it. Move that filter or column onto the access dimension.
 
-### 3. Start the backend server
+**`Operands of <= cannot be literal NULL`**
+A field resolved to NULL because it could not be computed under the permission, and a comparison against it reached the database. This is a *missing operand*, not a bad comparison — the cause is the reachability problem above.
 
-```bash
-npm run server
-# → http://localhost:3001
-```
+**`Couldn't find EmbedPortal`**
+Either you have not published, or you have two portals in one file.
 
-### 4. Start the frontend (in a separate terminal)
+**`Property 'enabled' does not exist on type 'EmbedPortal.ai'`**
+AI is switched on in the token, not in the portal definition.
 
-```bash
-npm run dev
-# → https://localhost:5173
-```
+**`undefined is not an object (evaluating 'r2.field.forEach')`**
+An empty group in a dataset `view {}` block. Delete metrics from a group and you must delete the group if it empties. The error names neither the group nor the file.
 
-Open <https://localhost:5173> in your browser. Accept the self-signed certificate warning.
+**Everything looks unfiltered**
+You are testing as an admin. See [Step 9](#step-9-test-as-a-real-user).
 
-## Running it for a demo
+**Your change had no effect**
+Check what is published. This is the answer more often than it deserves to be.
 
-Two terminals. Nothing is deployed and nothing needs to be.
+**Currency renders without a symbol, with two decimals**
+The format is `[$$]#,##0`, not `$#,##0`. An unrecognised pattern is ignored silently.
 
-```bash
-npm install                 # once
-npm run server              # terminal 1 — API on :3001, reads .env
-npm run dev                 # terminal 2 — app on https://localhost:5173
-```
+---
 
-Open <https://localhost:5173> and accept the self-signed certificate warning.
-The Vite dev server proxies `/api/*` to the Express server, so the login and
-the embed token work exactly as they would if this were hosted.
+## Checklist
 
-### If the certificate warning gets in the way
+- [ ] Scope grain decided before modelling
+- [ ] User attributes created in Admin, names matching exactly
+- [ ] RLP-as-code enabled for the workspace
+- [ ] Permission sits on a model every query can reach
+- [ ] Every filter and column checked against that rule
+- [ ] Portal published to production
+- [ ] Embed credentials in the server environment, never in the browser
+- [ ] Identity derived from a signed session, not the request body
+- [ ] Verified as a non-admin user, two accounts, different numbers
+- [ ] `embed_org_id` set if you use `org_workspace_role`
 
-Some browser extensions block interaction on a self-signed origin. Build and
-serve over plain HTTP instead:
+---
 
-```bash
-npm run build
-npx serve dist -l 4173      # plus `npm run server` for the API
-```
+## Reference
 
-You will need a proxy for `/api/*`, or point the app at `http://localhost:3001`
-directly.
-
-### Presenting it
-
-Share your screen rather than a link. There is no URL to send: that is
-deliberate, because the shared password gives access to customer data and a
-link would outlive the meeting.
-
-### If it ever does need hosting
-
-Do not reuse the `shelfoptix-embed-demo` Netlify site — it serves the demo4
-demo. Create a separate site, set the five variables from `.env` in that
-site's own environment, and read the security notes below first: one shared
-password across four accounts is not a control that survives being on the
-open internet.
+- [Embed Portal](https://docs.holistics.io/embedded/embed-portal/) · [Token parameters](https://docs.holistics.io/embedded/embed-portal/parameters-reference) · [Identity and workspaces](https://docs.holistics.io/embedded/identity-workspace)
+- [Self-serve exploration](https://docs.holistics.io/embedded/self-serve-exploration) · [Row-level permission as code](https://docs.holistics.io/docs/access-control/row-level-permission-as-code)
