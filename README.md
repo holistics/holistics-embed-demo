@@ -34,63 +34,13 @@ This is the decision that shapes everything, and the one most likely to cost you
 
 > **What combination of things decides which rows a user can see?**
 
-For us it was **state** *and* **department**. Two attributes at completely different grains — a state belongs to a store, a department belongs to a product. That mismatch drove the entire model design, and we got it wrong three times before getting it right.
-
-Write your answer down before modelling. If it is a single attribute on a single dimension, the rest of this guide is easy. If it is two attributes at different grains, read [Step 3](#step-3-build-the-access-dimension) carefully — that step exists for exactly this case.
+Write your answer down before modelling. If it is a single attribute on a single dimension, the rest of this guide is easy. If it is two attributes at different grains, read [Step 2](#step-2-build-the-access-dimension) carefully.
 
 ---
 
-## Step 1: Model your data
+## Step 1: Create your user attributes
 
-Start with a normal star schema. Facts join to dimensions; dimensions do not join to each other.
-
-```aml
-Dataset shelfoptix_pg_ai {
-  models: [
-    store_meta,        // dimension: one row per store
-    sales_detail,      // fact: what sold
-    onhand_detail      // fact: what is in stock
-  ]
-
-  relationships: [
-    relationship(sales_detail.store_no  > store_meta.store_no, true, 'one_way'),
-    relationship(onhand_detail.store_no > store_meta.store_no, true, 'one_way')
-  ]
-}
-```
-
-`one_way` means the dimension filters the fact, never the reverse. It is the right default and it keeps nonsense combinations out of the field list.
-
-### When the source data cannot answer the question
-
-Do not force it in AQL. Write a query model — a model whose source is SQL you control:
-
-```aml
-Model order_lines {
-  type: 'query'
-  data_source_name: 'your_connection'
-
-  dimension store_no { type: 'number' definition: @sql {{ #SOURCE.store_no }};; }
-  // ... one dimension per output column
-
-  query: @sql
-    select s.store_no, s.primary_sku_no, sum(s.units) as units
-    from sales s
-    join onhand o using (store_no, primary_sku_no)
-    group by 1, 2
-  ;;
-}
-```
-
-We needed this twice: once to join sales and on-hand at store × SKU (the two views only met at store level), and once to pre-compute a peer benchmark. Doing the join in SQL avoided a whole class of problem — no computed join keys, no relationship ordering, nothing added to the source models.
-
-> **Watch out.** We first tried a computed dimension on a source model and used it in a relationship. It validated locally and failed in the cloud with `Field pair_key not found in model ...`, because the dataset reached the server before the edited model did. SQL sidesteps it.
-
----
-
-## Step 2: Create your user attributes
-
-In Holistics, go to **Admin → User Attributes** and create one per scope. Ours:
+After define the things that you use to see, then In Holistics, go to **Admin → User Attributes** and create one per scope. Example:
 
 | Attribute | Example value |
 |---|---|
@@ -99,96 +49,30 @@ In Holistics, go to **Admin → User Attributes** and create one per scope. Ours
 
 The names matter — they must match the permission definitions exactly, and the keys your app puts in the token.
 
-Confirm they exist before going further. The CLI tells you:
-
-```bash
-holistics aml validate
-# Use 5 user attribute(s) on server: store_state, dept, h_email, h_role, h_name
-```
-
-`h_email`, `h_role` and `h_name` are built in. If your two are not listed, the permissions will silently do nothing.
-
-> **Also:** row-level permission as code is **off by default**. Ask Holistics support to enable it for your workspace, or your permission blocks will be ignored.
-
 ---
 
-## Step 3: Build the access dimension
+## Step 2: Build the access dimension
 
-Here is the rule that governs everything, and it is not obvious:
+Here is the rule that governs everything:
 
 > **Every model in a query must be able to reach the model your permission sits on.**
 >
 > If it cannot, Holistics does not skip the rule — it **blocks the widget**, because returning rows it cannot prove are in scope would be a leak.
 
-If you scope by one attribute that lives on one dimension every fact joins to, you are already fine: put the permission there and skip to [Step 4](#step-4-add-the-permissions).
+If you scope by one attribute that lives on one dimension every fact joins to, you are already fine: put the permission there and skip to [Step 3](#step-3-add-the-permissions).
 
-If you scope by **two attributes at different grains**, you need a dimension sitting at the grain where both questions can be answered. We learned this the expensive way:
+If you scope by **two attributes at different grains**, you need a dimension sitting at the grain where both questions can be answered. Failed example:
 
-| We put the permission on | What broke |
+| Permission placed on | Result |
 |---|---|
 | Each fact table | A query over sales cannot reach a rule on on-hand — facts join to dimensions, never to each other. Everything blocked. |
 | A product dimension | Facts fine. Every widget showing a store column blocked. |
 | A department dimension | Tiles fine. Every table with store attributes blocked. |
 | **A store × department dimension** | **Works** |
 
-So build one row per combination:
-
-```aml
-Model dim_store_dept {
-  type: 'query'
-
-  dimension scope_key       { type: 'text' primary_key: true
-    definition: @sql {{ #SOURCE.scope_key }};; }
-  dimension store_state     { type: 'text' definition: @sql {{ #SOURCE.store_state }};; }
-  dimension dept            { type: 'text' definition: @sql {{ #SOURCE.dept }};; }
-  dimension store_group_a_b { type: 'text' definition: @sql {{ #SOURCE.store_group_a_b }};; }
-  dimension store_city      { type: 'text' definition: @sql {{ #SOURCE.store_city }};; }
-
-  query: @sql
-    with depts as (
-      select distinct dept_description as dept from sales where dept_description is not null
-    ),
-    stores as (
-      select store_no,
-             max(store_state)      as store_state,
-             max(store_city)       as store_city,
-             max(store_group_a_b)  as store_group_a_b
-      from store_meta group by store_no
-    )
-    select concat(cast(s.store_no as string), '|', d.dept) as scope_key,
-           s.store_no, d.dept, s.store_state, s.store_city, s.store_group_a_b
-    from stores s cross join depts d
-  ;;
-}
-```
-
-Relationships join on a **single column**, so pair your two keys into one. Declare that key in the dataset, which means you never edit the source models:
-
-```aml
-  dimension sales_scope_key {
-    type: 'text'
-    hidden: true
-    definition: @aql concat(cast(sales.store_no, 'text'), '|', sales.dept_description) ;;
-    model: sales
-  }
-
-  relationships: [
-    relationship(sales.sales_scope_key > dim_store_dept.scope_key, true, 'one_way')
-    // ... one per fact
-  ]
-```
-
-### The part everyone misses
-
-**Put every attribute your dashboard filters on into this dimension too** — not only the scoped ones.
-
-We had an A/B Cohort filter reading `store_group_a_b` off the store dimension. That one filter pulled the store dimension into *every query on the page*, which made the department permission unreachable everywhere, no matter where the other columns came from. Moving the filter onto the access dimension fixed it.
-
-If a filter or a table column reads a model that cannot reach your permission, that widget breaks. Check every one.
-
 ---
 
-## Step 4: Add the permissions
+## Step 3: Add the permissions
 
 At dataset level, next to `models` and `relationships`:
 
@@ -213,22 +97,12 @@ Dataset shelfoptix_pg_ai {
 
 `value` is the user attribute's name, not a value. `field` is what gets filtered.
 
-### Giving someone full access
-
-Send the string `__ALL__` instead of a list and that one rule is bypassed:
-
-```js
-user_attributes: {
-  store_state: "__ALL__",              // sees every state
-  dept: ["HOME CLEANING", "HARDWARE"]  // still scoped by department
-}
-```
 
 That is how an admin account works without a second portal or a special case anywhere in your code.
 
 ---
 
-## Step 5: Define the embed portal
+## Step 4: Define the embed portal
 
 A portal is what your users land in. One file, named `*.embed.aml`:
 
@@ -239,7 +113,7 @@ EmbedPortal retailfocus_portal {
     shelfoptix_retailfocus,   // a dashboard
     shelfoptix_pg_ai,         // a dataset
   ]
-  initial_object: 'ai'
+  initial_object: 'ai' // object where users first land
   ai {
     customization {
       global { assistant_name: 'RetailFocus Assistant' icon: 'https://.../icon.png' }
@@ -251,34 +125,55 @@ EmbedPortal retailfocus_portal {
 }
 ```
 
-Three things worth knowing:
-
-- **Listing a dataset enables self-serve exploration and Ask AI on it.** Omit the dataset and users get dashboards only. There is no per-user switch — it is a property of the portal.
-- **`initial_object`** is where users land: `'ai'` for the assistant, or a dashboard name.
-- **One `EmbedPortal` per file.** Two in one file and the object will not resolve — you get `Couldn't find EmbedPortal` even after publishing.
-
-> **`ai { enabled: true }` does not exist.** The `ai` block is customization only. AI is switched on per user in the token (Step 7), and must also be enabled for your workspace.
-
 ---
 
-## Step 6: Publish, then get your credentials
+## Step 5: Publish, then get your credentials
 
-**Embed objects and permissions resolve against production, not your development branch.**
+**Embed objects and permissions resolve against production, not your development branch.** Validate, then publish:
 
 ```bash
-holistics aml validate     # always, before publishing
+holistics aml validate
 ```
 
-Then hit **Publish** in the Studio. Until you do:
-
-- the portal 404s with `Couldn't find EmbedPortal`
-- permission changes appear not to work, because production still has the old ones
-
-We lost hours to this. If behaviour does not match your code, **check what is published before debugging anything else.**
+Then hit **Publish** in the Studio. Before publishing, a portal returns `Couldn't find EmbedPortal`, and permission changes appear to have no effect because production still has the previous version. If behaviour does not match the code, check what is published before debugging anything else.
 
 Then **Tools → Embedded Analytics**, find your portal, click **Enable**, and copy the **Key ID** and **Secret**. One credential pair covers every portal in the workspace — they are per-tenant, not per-portal.
 
 ---
+
+---
+
+## Step 6: Decide where the credentials live
+
+Four secrets come out of the previous step and the app needs all of them. Where they belong depends on nothing more than whether the app is hosted.
+
+| Secret | What it does |
+|---|---|
+| Embed **Key ID** | Identifies the portal in the URL. Not sensitive on its own |
+| Embed **Secret** | Signs the embed token. **Anyone holding it can mint a token for any user** |
+| Session secret | Signs your own sign-in sessions. Rotate it and everyone is signed out |
+| User passwords | Whatever your app authenticates against |
+
+The embed secret is the one to be careful with. It bypasses your login entirely: hold it and you can assert any identity and any scope, without ever seeing the sign-in screen. Treat it like a database password, not like an API key.
+
+**Running locally.** A gitignored `.env` file, read by the server process only:
+
+```env
+HOLISTICS_PORTAL_KEY=...
+HOLISTICS_PORTAL_SECRET=...
+SESSION_SECRET=...                 # openssl rand -hex 48
+HOLISTICS_HOST=https://your-tenant.holistics.io
+```
+
+Two things to check. First, that `.env` is actually ignored — and that variants like `.env.backup` are too, since a copy left in the repo directory is one `git add -A` away from being committed. Second, that no secret is quoted into the frontend bundle: anything reaching the browser is public, so read these only in server code.
+
+Values containing `#` need quoting, or `.env` treats the rest of the line as a comment and silently truncates the value. The result is a secret that looks correct in the file and fails at runtime.
+
+**Hosted.** Use your platform's own secret store — environment variables in the hosting provider, or a secrets manager. The deploy artefact should never contain them. This is what keeps the app working when your laptop is off, and it means rotating a secret does not require a code change.
+
+**Sharing passwords with real users.** Use a password manager's share feature rather than email or chat: it can expire, and it can be locked to a recipient's address. If you use 1Password, `op item share <item> --emails a@b.com --expires-in 30d` does both. Keep the *server* secrets in a different item from anything you share with users — they are for the application, not for people.
+
+**What not to do:** commit any of them, put them in the frontend, paste them into a ticket, or share the embed secret with someone who only needs to log in.
 
 ## Step 7: Mint the token in your app
 
@@ -333,13 +228,11 @@ Then render `<iframe src={url}>`.
 | `permissions.org_workspace_role` | |
 | export and timezone settings | |
 
-> **`org_workspace_role` does nothing without `embed_org_id`.** We set the role for a week before noticing it was inert. Users sharing an `embed_org_id` can see each other's shared dashboards; different ids are isolated.
-
 ---
 
-## Step 8: Do not let the browser choose the identity
+## Step 8: Let the server decide who the user is
 
-The most common mistake, and we made it first:
+The most common mistake:
 
 ```js
 // WRONG — the browser says who it is
@@ -449,7 +342,8 @@ The format is `[$$]#,##0`, not `$#,##0`. An unrecognised pattern is ignored sile
 - [ ] Permission sits on a model every query can reach
 - [ ] Every filter and column checked against that rule
 - [ ] Portal published to production
-- [ ] Embed credentials in the server environment, never in the browser
+- [ ] Embed secret in a server-side store, never in the frontend bundle
+- [ ] `.env` and its variants gitignored
 - [ ] Identity derived from a signed session, not the request body
 - [ ] Verified as a non-admin user, two accounts, different numbers
 - [ ] `embed_org_id` set if you use `org_workspace_role`
