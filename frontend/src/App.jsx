@@ -46,10 +46,13 @@ function CapabilityBadge({ capability, label }) {
 }
 
 // --- Login -----------------------------------------------------------
-// A dropdown of emails plus one shared password. The password is checked
-// on the server and exchanged for a short-lived session token; the token
-// is what /api/embed-token requires, so the identity it mints comes from
-// something the server signed rather than from the request body.
+// A dropdown of emails. The password field is kept because the demo is
+// partly about showing a host app authenticating a user, but the check is
+// stubbed server-side -- anything signs in, empty included.
+//
+// The rest of the flow is unchanged and still worth showing: sign-in
+// returns a signed session, and /api/embed-token derives the identity
+// from that signature rather than from the request body.
 function LoginScreen({ users, onSignIn, loading, error, submitting }) {
   // Derived, not synced: the field falls back to the first account until
   // someone picks one, so there is no effect writing state on mount.
@@ -59,7 +62,9 @@ function LoginScreen({ users, onSignIn, loading, error, submitting }) {
   const setEmail = setChosen;
 
   const selected = users.find((u) => u.email === email);
-  const canSubmit = Boolean(selected) && password.length > 0 && !submitting;
+  // No password requirement: the check is stubbed for the local demo, so an
+  // empty field signs in too.
+  const canSubmit = Boolean(selected) && !submitting;
 
   const submit = (e) => {
     e.preventDefault();
@@ -92,14 +97,16 @@ function LoginScreen({ users, onSignIn, loading, error, submitting }) {
             ))}
           </select>
 
-          <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">Password</label>
+          <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">
+            Password <span className="font-normal text-slate-400">— optional, not checked</span>
+          </label>
           <input
             id="password"
             type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••••••"
+            placeholder="anything — not checked"
             className="w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white"
           />
 
@@ -139,7 +146,7 @@ function LoginScreen({ users, onSignIn, loading, error, submitting }) {
           </form>
 
           <p className="text-xs text-slate-400 mt-4 text-center">
-            Demo sign-in: one shared password across the four accounts. The account you pick becomes the embed identity.
+            Local demo. The password is not checked — pick an account and sign in. Whoever you pick becomes the embed identity, and the data is scoped to them.
           </p>
         </div>
       </div>

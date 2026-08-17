@@ -3,6 +3,9 @@
 A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
 
 > **This branch runs locally only. Do not deploy it.**
+> The password check is stubbed — *any* value signs you in, including an
+> empty one. Hosted, that hands any visitor the Masterview account, which
+> sees every state and every department.
 > `shelfoptix-embed-demo.netlify.app` serves the demo4 retailer/manufacturer
 > demo, not this app. Deploying this branch would take that site over. The
 > RetailFocus portal it embeds is a customer POC behind a shared password,
@@ -79,9 +82,9 @@ attributes ride in the token but nothing filters on them.
 
 **How sign-in works**
 
-One shared password across all four accounts, held in
-`SHELFOPTIX_DEMO_PASSWORD` and checked only on the server. The browser
-never receives it.
+The password is **not checked** — any value signs you in, empty included.
+The field is still on screen because the demo is partly about showing a
+host app authenticating a user, but only the comparison is stubbed.
 
 1. `POST /api/login` with `{ email, password }`. A wrong password and an
    unknown email return the same 401, so the endpoint cannot be used to
