@@ -109,7 +109,26 @@ export const USERS = [
 // One portal for everyone. The Explorer/Standard split is expressed in
 // the token's settings and permissions, not by pointing at a second
 // portal object.
+// TWO PORTALS, PICKED BY CAPABILITY.
+//
+// Exploration is not a token flag. Per the docs, a portal that LISTS a
+// dataset gives everyone who opens it self-serve exploration; a portal that
+// omits it is view-only. The token can withhold Ask AI and the workspaces,
+// but not exploration. So "Standard/Traditional Dashboard View" is only
+// true if that user is sent to a portal with no dataset in it.
+//
+// Each portal carries its own Key ID and Secret, so routing a user also
+// means signing with a different secret. portalFor() returns the env var
+// suffix; the request handler resolves the pair and fails loudly if it is
+// missing rather than minting a token against the wrong portal.
 export const PORTAL = "retailfocus_portal";
+export const VIEW_PORTAL = "retailfocus_view_portal";
+
+export function portalFor(user) {
+  return user.capability === "explorer"
+    ? { name: PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_PORTAL" }
+    : { name: VIEW_PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_VIEW_PORTAL" };
+}
 
 export const CAPABILITY_LABEL = {
   explorer: "Self-Serve (Explorer)",
@@ -135,7 +154,9 @@ export function buildPayload(user) {
   const now = Math.floor(Date.now() / 1000);
 
   return {
-    object_name: PORTAL,
+    // Must name the portal this token is signed for. A viewer signed against
+    // the explorer portal would get exploration back.
+    object_name: portalFor(user).name,
     object_type: "EmbedPortal",
 
     // Identity. embed_user_id keys the user's saved work, so it has to be

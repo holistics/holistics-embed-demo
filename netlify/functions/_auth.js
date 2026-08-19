@@ -1,58 +1,103 @@
 // =====================================================================
-// Sign-in for the RetailFocus demo.
+// Sign-in for the RetailFocus app.
 //
-// THE PASSWORD CHECK IS OFF. Any value signs you in, including an empty
-// one. The app runs on a laptop and is shown by screen share, so a
-// password was friction protecting nothing -- there is no URL for anyone
-// else to reach.
+// PER-USER PASSWORDS. Each account has its own password; there is no
+// shared one. This replaced a single SHELFOPTIX_DEMO_PASSWORD that any of
+// the four emails could use, which was fine on a laptop and is not fine on
+// a public URL fronting real ShelfOptix / P&G / Dollar General data.
 //
-// The field is still on the screen and the flow is unchanged, because the
-// point of the demo is showing a host app authenticating a user and
-// exchanging that for a scoped embed token. Only the comparison is
-// stubbed. passwordMatches() below is one line to restore.
+// WHERE THE SECRETS LIVE. Hashes only, one env var per account, named
+// SHELFOPTIX_PW_<ID> from the user id: SHELFOPTIX_PW_AMIT, _RANDY, _MYRI,
+// _MASTERVIEW. Env vars rather than the user file because _users.js is
+// committed and these must never be. Plaintext is never stored anywhere,
+// by us or by the app.
 //
-// THIS MUST NOT BE DEPLOYED. Hosted, it would hand any visitor the
-// Masterview account, which sees every state and every department.
+// SCRYPT, not sha256. sha256 is a fast hash: with the digest in hand an
+// attacker tries billions of candidates a second. scrypt is deliberately
+// slow and memory-hard, so a leaked hash is not a leaked password. Node
+// ships it, so this adds no dependency.
 //
-// WHY A SESSION TOKEN AND NOT JUST A BOOLEAN.
-// The first cut of this app let the browser post a user id straight to
-// /api/embed-token, so the server minted whatever identity it was asked
-// for. Adding a password screen in front of that changes nothing on its
-// own -- anyone can still POST to the token endpoint directly and skip
-// the screen entirely. So /api/login issues a signed session and
-// /api/embed-token derives the user FROM that session. The identity now
-// comes from something the server signed, not from the request body.
+// EVERY COMPARISON IS CONSTANT TIME, and an unknown email costs the same
+// as a known one, because verify() runs against a dummy hash rather than
+// returning early. Otherwise response timing would enumerate the accounts
+// that login.js is careful not to name.
 //
-// This is demo-grade, not an auth system: one shared password, no
-// per-user credentials, no lockout, no rotation, no revocation beyond
-// changing SHELFOPTIX_SESSION_SECRET. It is enough that a link to the
-// site is not a link to the data, and no more than that.
+// WHAT THIS STILL IS NOT. There is no lockout, no rotation, no revocation
+// beyond changing SHELFOPTIX_SESSION_SECRET, and no per-attempt throttle.
+// On a public URL the defence against brute force is password entropy, so
+// generate them with scripts/generate-passwords.mjs and do not hand-pick
+// them. Put a platform rate limit in front of this as well.
 // =====================================================================
+import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
+
+import { USERS } from "./_users.js";
 
 const SESSION_TTL_SECONDS = 8 * 60 * 60; // a working day
 
 export function authConfigError() {
-  // SHELFOPTIX_DEMO_PASSWORD is no longer required -- nothing reads it.
-  // The session secret still is: it signs the token /api/embed-token
-  // trusts, and identity still comes from that signature rather than from
-  // the request body.
   if (!process.env.SHELFOPTIX_SESSION_SECRET) return "SHELFOPTIX_SESSION_SECRET is not set.";
+  const missing = USERS.filter((u) => !process.env[passwordEnvVar(u)]).map((u) => passwordEnvVar(u));
+  if (missing.length) {
+    return `No password configured for ${missing.length} account(s): ${missing.join(", ")}.`;
+  }
   return null;
 }
 
-// Local demo: every password is accepted, empty included.
-//
-// To put the check back, restore the body below. It was a constant-time
-// compare over sha256 digests -- hashed first because timingSafeEqual
-// throws on a length mismatch, which would itself leak the length:
-//
-//   const expected = process.env.SHELFOPTIX_DEMO_PASSWORD || "";
-//   const a = crypto.createHash("sha256").update(String(candidate ?? ""), "utf8").digest();
-//   const b = crypto.createHash("sha256").update(expected, "utf8").digest();
-//   return crypto.timingSafeEqual(a, b);
-export function passwordMatches() {
-  return true;
+export function assertDeployable() {
+  const problem = authConfigError();
+  if (!problem) return;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      `Refusing to start: ${problem} This app fronts real customer data; ` +
+        "it must not run without a password check. See netlify/functions/_auth.js."
+    );
+  }
+  console.warn(`[auth] ${problem} Sign-in will return 500 until it is set.`);
+}
+
+export function passwordEnvVar(user) {
+  return `SHELFOPTIX_PW_${String(user.id).toUpperCase()}`;
+}
+
+const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
+
+// Format: scrypt$N$r$p$<salt base64>$<key base64>
+export function hashPassword(plain) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync(String(plain), salt, SCRYPT.keylen, SCRYPT);
+  return [
+    "scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p,
+    salt.toString("base64"), key.toString("base64"),
+  ].join("$");
+}
+
+function verifyAgainstHash(stored, candidate) {
+  const parts = String(stored).split("$");
+  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const [, N, r, p, saltB64, keyB64] = parts;
+  const salt = Buffer.from(saltB64, "base64");
+  const expected = Buffer.from(keyB64, "base64");
+  const actual = crypto.scryptSync(String(candidate ?? ""), salt, expected.length, {
+    N: Number(N), r: Number(r), p: Number(p),
+  });
+  return crypto.timingSafeEqual(actual, expected);
+}
+
+// A real scrypt hash of a value nobody knows. Verifying against this when
+// the email is unknown makes a bad email cost the same as a bad password,
+// so timing cannot enumerate the accounts.
+const DUMMY_HASH = hashPassword(crypto.randomBytes(32).toString("hex"));
+
+// Takes the USER, not just the candidate: each account has its own secret.
+// An unknown user still burns a full scrypt verification.
+export function passwordMatches(user, candidate) {
+  const stored = user ? process.env[passwordEnvVar(user)] : null;
+  if (!stored) {
+    verifyAgainstHash(DUMMY_HASH, candidate);
+    return false;
+  }
+  return verifyAgainstHash(stored, candidate);
 }
 
 export function issueSession(user) {

@@ -24,10 +24,10 @@ export const handler = async (event) => {
   }
 
   const user = USERS.find((u) => u.email.toLowerCase() === String(email ?? "").trim().toLowerCase());
-  const ok = passwordMatches(password);
-
-  // Run the password check even when the email is unknown, so a bad email
-  // does not answer faster than a bad password.
+  // Pass the user in: each account has its own password. An unknown email
+  // still burns a full scrypt verification against a dummy hash, so a bad
+  // email does not answer faster than a bad password.
+  const ok = passwordMatches(user, password);
   if (!user || !ok) return json(401, { error: "That email and password do not match." });
 
   return json(200, {

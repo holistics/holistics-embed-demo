@@ -7,7 +7,7 @@
 // One portal for all four users. What differs per user is inside the
 // token: Ask AI, workspace permissions, and the row-level attributes.
 import jwt from "jsonwebtoken";
-import { findUser, buildPayload } from "./_users.js";
+import { findUser, buildPayload, portalFor } from "./_users.js";
 import { authConfigError, userIdFromRequest } from "./_auth.js";
 
 const HOST = process.env.HOLISTICS_HOST || "https://us.holistics.io";
@@ -30,12 +30,19 @@ export const handler = async (event) => {
   const user = findUser(userId);
   if (!user) return json(401, { error: "This session no longer matches a known account." });
 
-  const key = process.env.HOLISTICS_SHELFOPTIX_PORTAL_KEY;
-  const secret = process.env.HOLISTICS_SHELFOPTIX_PORTAL_SECRET;
+  // Credentials are per PORTAL, not per tenant. Explorers go to the portal
+  // that lists the dataset; viewers go to the dashboard-only one, because
+  // exploration cannot be withheld by the token. So the pair is resolved
+  // from the user, per request.
+  const { name: portalName, envPrefix } = portalFor(user);
+  const key = process.env[`${envPrefix}_KEY`];
+  const secret = process.env[`${envPrefix}_SECRET`];
   if (!key || !secret) {
     return json(500, {
       error:
-        "Missing HOLISTICS_SHELFOPTIX_PORTAL_KEY / _SECRET. Publish the portals, then Tools > Embedded Analytics > Enable to copy the Key ID and Secret.",
+        `Missing ${envPrefix}_KEY / _SECRET for portal '${portalName}'. ` +
+        "Publish that portal, then Tools > Embedded Analytics > Enable to copy the Key ID and Secret. " +
+        "Every portal has its own pair.",
     });
   }
 

@@ -117,7 +117,7 @@ npm run dev          # terminal 2 — app on https://localhost:5173
 
 Accept the self-signed certificate warning. Sign in with any of the four emails and anything at all in the password field.
 
-`.env` needs `HOLISTICS_SHELFOPTIX_PORTAL_KEY`, `HOLISTICS_SHELFOPTIX_PORTAL_SECRET`, `SHELFOPTIX_SESSION_SECRET`, `HOLISTICS_HOST`. `SHELFOPTIX_DEMO_PASSWORD` is no longer read.
+`.env` needs `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET`, `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY` / `_SECRET`, `SHELFOPTIX_SESSION_SECRET`, `SHELFOPTIX_DEMO_PASSWORD` and `HOLISTICS_HOST`. `SHELFOPTIX_DEMO_PASSWORD` **is** read again as of 19 Aug 2026 — the stubbed password check was restored, and the app refuses to boot in production without it.
 
 Stop both:
 

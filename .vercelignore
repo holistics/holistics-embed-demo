@@ -1,0 +1,7 @@
+# Local-dev and dead-runtime code. Vercel serves api/ and dist/ only.
+backend/
+# NOTE: netlify/functions/ is NOT ignored -- api/ imports the auth and
+# user modules from it. Only the stale Cloudflare Pages dir is excluded.
+functions/api/
+node_modules/
+dist/

@@ -36,6 +36,33 @@ const ALL = "__ALL__";
 // Scope reads the same way everywhere: as the list, or as the word "All".
 const scopeText = (v) => (v === ALL ? "All" : Array.isArray(v) ? v.join(", ") : String(v ?? ""));
 
+// Every /api call goes through this instead of res.json().
+//
+// This app needs TWO processes: vite on :5173 and the Express backend on
+// :3001, which vite proxies /api to. With the backend down the proxy hands
+// back an empty body, res.json() throws "Unexpected end of JSON input", and
+// nothing in that message points at the missing server. The same thing
+// happens on a 502 or if the backend restarts mid-request.
+//
+// Reading the text first costs nothing and lets the failure name itself.
+async function readJson(res) {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(
+      `Empty response from ${res.url || "the API"} (${res.status} ${res.statusText}). ` +
+        "Is the backend running? It listens on :3001 and starts with `npm run server`."
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `Expected JSON from ${res.url || "the API"} (${res.status} ${res.statusText}), got: ` +
+        text.slice(0, 120)
+    );
+  }
+}
+
 function CapabilityBadge({ capability, label }) {
   const explorer = capability === "explorer";
   return (
@@ -53,23 +80,25 @@ function CapabilityBadge({ capability, label }) {
 // The rest of the flow is unchanged and still worth showing: sign-in
 // returns a signed session, and /api/embed-token derives the identity
 // from that signature rather than from the request body.
-function LoginScreen({ users, onSignIn, loading, error, submitting }) {
-  // Derived, not synced: the field falls back to the first account until
-  // someone picks one, so there is no effect writing state on mount.
-  const [chosen, setChosen] = useState("");
+function LoginScreen({ onSignIn, error, submitting }) {
+  // A plain typed sign-in. This was a dropdown of the four accounts, which
+  // meant the login screen had to be handed the account list -- real
+  // customer email addresses and each one's exact state and department
+  // scope -- before anyone had authenticated. Typing the address costs one
+  // field and lets /api/config sit behind the session where it belongs.
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const email = chosen || users[0]?.email || "";
-  const setEmail = setChosen;
 
-  const selected = users.find((u) => u.email === email);
-  // No password requirement: the check is stubbed for the local demo, so an
-  // empty field signs in too.
-  const canSubmit = Boolean(selected) && !submitting;
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !submitting;
 
   const submit = (e) => {
     e.preventDefault();
-    if (canSubmit) onSignIn(email, password);
+    if (canSubmit) onSignIn(email.trim(), password);
   };
+
+  const field =
+    "w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] " +
+    "focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white";
 
   return (
     <div className="min-h-screen w-full bg-[#070d18] flex items-center justify-center p-6 font-sans">
@@ -81,82 +110,55 @@ function LoginScreen({ users, onSignIn, loading, error, submitting }) {
 
         <div className="bg-white rounded-lg shadow-2xl p-8">
           <h1 className="text-xl font-semibold text-slate-800">Sign in</h1>
-          <p className="text-sm text-slate-500 mt-1 mb-6">Choose an account to continue to RetailFocus.</p>
+          <p className="text-sm text-slate-500 mt-1 mb-6">Continue to RetailFocus.</p>
 
           <form onSubmit={submit}>
-          <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-          <select
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={!users.length}
-            className="w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white cursor-pointer disabled:opacity-50"
-          >
-            {users.map((u) => (
-              <option key={u.id} value={u.email}>{u.email}</option>
-            ))}
-          </select>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className={field}
+            />
 
-          <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">
-            Password <span className="font-normal text-slate-400">— optional, not checked</span>
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="anything — not checked"
-            className="w-full rounded-md border border-slate-300 shadow-sm focus:border-[#E63946] focus:ring focus:ring-[#E63946] focus:ring-opacity-50 text-sm py-2.5 px-3 bg-white"
-          />
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={field}
+            />
 
-          {error && (
-            <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>
-          )}
+            {error && (
+              <p className="mt-3 text-sm text-red-600" role="alert">{error}</p>
+            )}
 
-          {/* What this account will actually see, before signing in. */}
-          {selected && (
-            <dl className="mt-5 space-y-2 text-sm bg-slate-50 border border-slate-200 rounded-md p-4">
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">Name</dt>
-                <dd className="text-slate-800 font-medium text-right">{selected.name}<span className="text-slate-400 font-normal"> · {selected.org}</span></dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500">State</dt>
-                <dd className="text-slate-800 text-right">{scopeText(selected.states)}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-500 shrink-0">Departments</dt>
-                <dd className="text-slate-800 text-right">{scopeText(selected.depts)}</dd>
-              </div>
-              <div className="flex justify-between gap-4 items-center pt-1">
-                <dt className="text-slate-500">Access</dt>
-                <dd><CapabilityBadge capability={selected.capability} label={selected.capability_label} /></dd>
-              </div>
-            </dl>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit || loading}
-            className="mt-6 w-full py-2.5 bg-[#E63946] text-white text-sm font-semibold rounded-md hover:bg-[#d62839] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {loading ? "Loading accounts…" : submitting ? "Signing in…" : "Sign in"}
-          </button>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="mt-6 w-full rounded-md bg-[#E63946] text-white text-sm font-semibold py-2.5 hover:bg-[#c92f3b] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {submitting ? "Signing in..." : "Sign in"}
+            </button>
           </form>
-
-          <p className="text-xs text-slate-400 mt-4 text-center">
-            Local demo. The password is not checked — pick an account and sign in. Whoever you pick becomes the embed identity, and the data is scoped to them.
-          </p>
         </div>
+
+        <p className="text-center text-xs text-slate-500 mt-6">
+          Scope is enforced by row-level permission on the dataset, not by this screen.
+        </p>
       </div>
     </div>
   );
 }
-
 export default function App() {
   const [users, setUsers] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   // The signed-in user plus the server-issued session token. Restored from
   // sessionStorage so a refresh does not bounce you back to the login screen.
@@ -186,13 +188,27 @@ export default function App() {
   const [isDevMode, setIsDevMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // Fetched AFTER sign-in, not on mount. The list carries real customer
+  // email addresses and each account's scope, so it sits behind the session
+  // now; the login screen takes a typed address and needs none of it.
   useEffect(() => {
-    fetch("/api/config")
-      .then((res) => res.json())
+    if (!auth?.session) {
+      setUsers([]);
+      setUsersLoading(false);
+      return;
+    }
+    setUsersLoading(true);
+    fetch("/api/config", { headers: { Authorization: `Bearer ${auth.session}` } })
+      .then(readJson)
       .then((data) => setUsers(data.users || []))
-      .catch(() => setUsers([]))
+      .catch((err) => {
+        // Not fatal: this only feeds the Users Reference page. Log it rather
+        // than blocking the dashboard behind it.
+        console.error("/api/config failed:", err);
+        setUsers([]);
+      })
       .finally(() => setUsersLoading(false));
-  }, []);
+  }, [auth?.session]);
 
   const signIn = useCallback(async (email, password) => {
     setSubmitting(true);
@@ -203,7 +219,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || `Sign-in failed (${res.status})`);
 
       const next = { user: data.user, session: data.session };
@@ -240,7 +256,7 @@ export default function App() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: "{}",
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (res.status === 401) {
         // Expired or rejected session: back to the login screen rather
         // than sitting on a page that will never load.
@@ -267,9 +283,7 @@ export default function App() {
   if (!session) {
     return (
       <LoginScreen
-        users={users}
         onSignIn={signIn}
-        loading={usersLoading}
         error={loginError}
         submitting={submitting}
       />
@@ -388,6 +402,9 @@ export default function App() {
               </div>
             ) : activePage === "users" ? (
               <div className="max-w-5xl mx-auto">
+                {usersLoading && (
+                  <p className="text-sm text-slate-500 mb-3">Loading accounts...</p>
+                )}
                 <table className="w-full bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden text-sm">
                   <thead>
                     <tr className="bg-[#070d18] text-white text-left">

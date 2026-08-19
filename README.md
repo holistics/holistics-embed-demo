@@ -285,22 +285,94 @@ What to check:
 > the gotchas specific to this codebase.
 
 
+**Two processes, both required, in separate terminals.** Vite serves the app and proxies `/api` to the Express backend; it does not start the backend for you.
+
 ```bash
 npm install
-npm run server     # API on :3001, reads .env
-npm run dev        # app on https://localhost:5173
+npm run server     # terminal 1 — API on :3001, reads .env
+npm run dev        # terminal 2 — app on https://localhost:5173
 ```
+
+Run only `npm run dev` and the app loads but every `/api` call comes back empty. See [Troubleshooting](#troubleshooting).
 
 Accept the self-signed certificate warning. `.env` needs:
 
 ```env
-HOLISTICS_SHELFOPTIX_PORTAL_KEY=...
+SHELFOPTIX_PW_AMIT=scrypt$...               # one per account, see below
+SHELFOPTIX_PW_RANDY=scrypt$...
+SHELFOPTIX_PW_MYRI=scrypt$...
+SHELFOPTIX_PW_MASTERVIEW=scrypt$...
+HOLISTICS_SHELFOPTIX_PORTAL_KEY=...         # retailfocus_portal, explorers
 HOLISTICS_SHELFOPTIX_PORTAL_SECRET=...
-SHELFOPTIX_SESSION_SECRET=...          # openssl rand -hex 48
+HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY=...    # retailfocus_view_portal, viewers
+HOLISTICS_SHELFOPTIX_VIEW_PORTAL_SECRET=...
+SHELFOPTIX_SESSION_SECRET=...               # openssl rand -hex 48
 HOLISTICS_HOST=https://your-tenant.holistics.io
 ```
 
-> **This example runs locally only. Do not deploy it.** The password check is stubbed — any value signs you in, empty included. Hosted, that would hand any visitor the account with the widest access.
+**Two portals, two credential pairs.** Embed credentials are per portal, not per tenant. `portalFor()` in `_users.js` routes explorers to `retailfocus_portal` and viewers to `retailfocus_view_portal`, and the token is signed with that portal's own secret. Sign a viewer against the explorer portal and they get exploration back.
+
+## Passwords
+
+**Each account has its own password.** There is no shared one. Only hashes are
+stored, one env var per account, `SHELFOPTIX_PW_<ID>` derived from the user id.
+Hashes live in env vars rather than in `_users.js` because that file is
+committed and these must never be.
+
+```bash
+node scripts/generate-passwords.mjs --write     # all accounts, hashes into .env
+node scripts/generate-passwords.mjs myri        # one account, prints the env line
+```
+
+The plaintext is printed once and written nowhere. Copy it into a password
+manager and give each person their own. Lost passwords are not recoverable, only
+replaceable, which is what storing hashes means.
+
+Hashing is **scrypt** with a per-account random salt, `N=16384, r=8, p=1`. Not
+sha256: a fast hash means a leaked digest is a leaked password. Comparison is
+constant-time, and an unknown email burns a full verification against a dummy
+hash so response timing cannot enumerate accounts.
+
+**Generated passwords are 20 characters from a 56-character alphabet, about 116
+bits.** That entropy is the actual defence against brute force, because the app
+has **no lockout and no per-attempt throttle**. Do not replace them with
+something memorable. On a public deployment put a platform rate limit in front
+as well — Vercel Firewall will do it.
+
+> **This app fronts real customer data.** Per-account passwords raise the floor;
+> they do not make it a hardened system. There is still no lockout, no rotation,
+> no revocation beyond changing `SHELFOPTIX_SESSION_SECRET`, and no audit trail
+> of who viewed what. Consider platform access control in front of it.
+
+---
+
+## Deploying to Vercel
+
+`api/` holds the Vercel handlers. They are thin HTTP adapters over
+`netlify/functions/_auth.js` and `_users.js`, which carry all the logic, so the
+Netlify, Vercel and local Express entrypoints cannot drift.
+
+**Required environment variables** (Project Settings → Environment Variables):
+
+| Variable | Why |
+|---|---|
+| `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET` | `retailfocus_portal` — explorers |
+| `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY` / `_SECRET` | `retailfocus_view_portal` — viewers |
+| `SHELFOPTIX_SESSION_SECRET` | Signs the session. `openssl rand -hex 48` |
+| `SHELFOPTIX_PW_<ID>` | One scrypt hash per account: `_AMIT`, `_RANDY`, `_MYRI`, `_MASTERVIEW`. **Boot fails in production if any is missing** |
+| `HOLISTICS_HOST` | e.g. `https://us.holistics.io` |
+| `ALLOWED_ORIGIN` | Only if the frontend is served from a different domain. Leave unset for a same-origin deploy; never set it to `*` |
+
+**Also required before it works:**
+
+- Both portals published, with Tools → Embedded Analytics → Enable run on **each**. Credentials are per portal.
+- The Holistics tenant reachable from Vercel, and the embed domain allowlisted if your tenant restricts referrers.
+- Platform-level access control in front of the deployment (Vercel Deployment Protection, SSO, or an IP allowlist). The in-app password is not a substitute.
+
+`vercel.json` sets the build to `npm run build` with output `dist`, and rewrites
+everything except `/api/*` to `index.html` for the SPA router. `.vercelignore`
+excludes `backend/` and the stale Cloudflare Pages dir in `functions/api/`, but
+**not** `netlify/functions/`, which `api/` imports from.
 
 ---
 
@@ -320,6 +392,15 @@ AI is switched on in the token, not in the portal definition.
 
 **`undefined is not an object (evaluating 'r2.field.forEach')`**
 An empty group in a dataset `view {}` block. Delete metrics from a group and you must delete the group if it empties. The error names neither the group nor the file.
+
+**A "dashboard only" user can still explore the dataset**
+Exploration is not a token flag. Per the docs, a portal that lists a dataset gives exploration to everyone who opens it; omitting the dataset is the only documented way to withhold it. `settings.ai.enabled` and `permissions` are per user; exploration is per portal. Route that user to a portal with no dataset in it.
+
+**`Missing HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY / _SECRET for portal 'retailfocus_view_portal'`**
+The dashboard-only portal has not been published, or embedding has not been enabled on it. Publish it, then Tools > Embedded Analytics > Enable, and copy that portal's own Key ID and Secret. They are not the same as the explorer portal's.
+
+**`Failed to execute 'json' on 'Response': Unexpected end of JSON input`**
+The Express backend is not running. Vite is up on :5173 and proxies `/api` to :3001, so with nothing listening there every call returns an empty body and `res.json()` fails on it. Start `npm run server` in a second terminal. Since the app fetches `/api/config` on mount, this fires on page load rather than when you sign in. `readJson()` in `App.jsx` now catches this and says so; if you see the raw browser message instead, something is calling `res.json()` directly.
 
 **Everything looks unfiltered**
 You are testing as an admin. See [Step 9](#step-9-test-as-a-real-user).
