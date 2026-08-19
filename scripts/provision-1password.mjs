@@ -81,8 +81,10 @@ function createItem(vault, template, dryRun) {
     for (const f of redacted.fields || []) {
       if (f.type === "CONCEALED") f.value = "<redacted>";
     }
-    console.log(`\n--- would create in vault "${vault}" ---`);
-    console.log(JSON.stringify(redacted, null, 2));
+    // stderr, not stdout: stdout carries the hashes only, so
+    // `... > vercel.env` captures exactly what you paste and nothing else.
+    console.error(`\n--- would create in vault "${vault}" ---`);
+    console.error(JSON.stringify(redacted, null, 2));
     return;
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "op-provision-"));
