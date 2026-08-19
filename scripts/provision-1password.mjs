@@ -75,6 +75,19 @@ function op(args, { input } = {}) {
 // Writes the template to a 600 temp file, creates the item, then removes the
 // file. The password is in that file for the lifetime of one op invocation
 // and in no argv at any point.
+// Deleting and recreating rather than `op item edit` because edit takes the
+// new password as a command-line argument, and argv is readable by anything
+// that can run `ps`. The template file keeps it off argv entirely. The item
+// UUID changes as a result, which is fine for a demo credential.
+function replaceItem(vault, title, dryRun) {
+  if (dryRun) return;
+  try {
+    op(["item", "delete", title, "--vault", vault]);
+  } catch {
+    // Not present yet. Nothing to remove.
+  }
+}
+
 function createItem(vault, template, dryRun) {
   if (dryRun) {
     const redacted = JSON.parse(JSON.stringify(template));
@@ -158,6 +171,9 @@ function combinedTemplate(issued) {
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
 const combined = argv.includes("--combined");
+// --replace rotates: removes the existing item first so rerunning does not
+// leave two items with the same title and different passwords.
+const replace = argv.includes("--replace");
 const vaultIndex = argv.indexOf("--vault");
 const vault = vaultIndex >= 0 ? argv[vaultIndex + 1] : null;
 const wanted = argv.filter((a, i) => !a.startsWith("--") && i !== vaultIndex + 1);
@@ -192,13 +208,17 @@ if (!targets.length) {
 const issued = targets.map((user) => ({ user, plain: generate() }));
 
 for (const { user, plain } of issued) {
+  const title = `ShelfOptix RetailFocus - ${user.name}`;
+  if (replace) replaceItem(vault, title, dryRun);
   createItem(vault, loginTemplate(user, plain), dryRun);
-  console.error(`  ${dryRun ? "would write" : "wrote"}  ShelfOptix RetailFocus - ${user.name}`);
+  console.error(`  ${dryRun ? "would write" : replace ? "replaced" : "wrote"}  ${title}`);
 }
 
 if (combined) {
+  const title = "ShelfOptix RetailFocus - all demo accounts (INTERNAL)";
+  if (replace) replaceItem(vault, title, dryRun);
   createItem(vault, combinedTemplate(issued), dryRun);
-  console.error(`  ${dryRun ? "would write" : "wrote"}  all demo accounts (INTERNAL)`);
+  console.error(`  ${dryRun ? "would write" : replace ? "replaced" : "wrote"}  ${title}`);
 }
 
 console.error(`\n=== paste into Vercel, then REDEPLOY or these do not take effect ===\n`);

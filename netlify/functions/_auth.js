@@ -62,18 +62,41 @@ export function passwordEnvVar(user) {
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 
-// Format: scrypt$N$r$p$<salt base64>$<key base64>
+// The hash is scrypt$N$r$p$<salt base64>$<key base64>, but it is STORED
+// base64-encoded so the value holds no '$'.
+//
+// That is not decoration. Pasting the raw form into Vercel's bulk .env box
+// silently mangled it: something in that path treats '$16384' and '$8' as
+// shell-style interpolation, so what came back out was a short string that
+// failed the six-part format check and returned false for every password.
+// The symptom was a plain 401 with no clue, and because the variables are
+// marked Sensitive they cannot be read back to see what landed.
+//
+// Base64 keeps the stored value to [A-Za-z0-9+/=], which no parser rewrites.
 export function hashPassword(plain) {
   const salt = crypto.randomBytes(16);
   const key = crypto.scryptSync(String(plain), salt, SCRYPT.keylen, SCRYPT);
-  return [
+  const raw = [
     "scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p,
     salt.toString("base64"), key.toString("base64"),
   ].join("$");
+  return Buffer.from(raw, "utf8").toString("base64");
+}
+
+// Accepts either encoding. A value containing '$' is the old raw form, so
+// existing local .env files keep working without a flag day.
+function decodeStored(stored) {
+  const s = String(stored).trim();
+  if (s.includes("$")) return s;
+  try {
+    return Buffer.from(s, "base64").toString("utf8");
+  } catch {
+    return s;
+  }
 }
 
 function verifyAgainstHash(stored, candidate) {
-  const parts = String(stored).split("$");
+  const parts = decodeStored(stored).split("$");
   if (parts.length !== 6 || parts[0] !== "scrypt") return false;
   const [, N, r, p, saltB64, keyB64] = parts;
   const salt = Buffer.from(saltB64, "base64");
