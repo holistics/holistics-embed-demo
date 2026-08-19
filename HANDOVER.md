@@ -148,7 +148,7 @@ npx serve dist -l 4173     # plus `npm run server`, and a proxy for /api/*
 
 **Netlify env changes need a redeploy** to reach a running site.
 
-**`.env` is gitignored; `.env.backup-*` is not.** A backup file sat one `git add -A` away from committing portal secrets. Do not leave copies in the repo directory.
+**`.env` variants used not to be gitignored.** A `.env.backup-*` file once sat one `git add -A` away from committing portal secrets. The pattern is now `.env*` (widened by `vercel link` on 20 Aug 2026, which also added `.vercel`), so copies are covered - but still do not leave them in the repo directory.
 
 **The password generator matters.** The first generated password contained `#`, which `.env` treats as a comment marker — the value was silently truncated and login failed while the file looked correct. Quote the value, and avoid `# $ " ' \ =`.
 
