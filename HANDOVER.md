@@ -91,7 +91,11 @@ Defined in `netlify/functions/_users.js` and nowhere else.
 | Myri | mdiazmartinez@shelfoptix.com | GA, TN, KY | 3 care depts | Standard |
 | Masterview | mv@shelfoptix.com | All (`__ALL__`) | All (`__ALL__`) | Explorer |
 
-Explorer → `org_workspace_role: editor`, AI on, personal workspace. Standard → `no_access`, AI off, no saving.
+Explorer → `org_workspace_role: editor`, AI on, personal workspace. Standard → `viewer`, AI off, no personal workspace.
+
+`viewer`, not `no_access`, since commit `d0ef22b`: Myri can open what her org publishes to the shared workspace but cannot create or edit there, which is a truer reading of "standard dashboard user" than being locked out of it. It leaks no rows - a shared dashboard re-runs under whoever opens it, so she sees Amit's dashboard through her own three departments. The reasoning is in `buildPayload()` in `_users.js`.
+
+**Both capabilities currently go to `retailfocus_portal`.** `retailfocus_view_portal` is written but never published, so it has no embed credentials, and `VIEW_PORTAL_UNAVAILABLE = true` in `_users.js` routes viewers to the explorer portal instead. That portal lists the dataset, so **Myri can explore** - the one thing the view portal exists to prevent, and not something any token flag can withhold. Open as of 20 Aug 2026, being picked up with Tai. To revert: publish the portal, fill the two empty `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_*` values in `.env`, set the flag to `false`.
 
 **Adding or changing a user** is one edit to that file plus a restart of `npm run server`. No AML change: the permissions match whatever the token carries.
 
@@ -150,6 +154,8 @@ npx serve dist -l 4173     # plus `npm run server`, and a proxy for /api/*
 
 **Two legacy function directories exist.** See item 2 above.
 
+**A running `backend/server.js` does not pick up code changes.** There is no watcher on it. A process started before `VIEW_PORTAL_UNAVAILABLE` was added kept routing Myri to the unpublished portal and returning `Missing HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY / _SECRET`, with the fix already sitting in the file. If behaviour does not match the code, restart the server before debugging anything else.
+
 ---
 
 ## Reference
@@ -162,20 +168,32 @@ npx serve dist -l 4173     # plus `npm run server`, and a proxy for /api/*
 | Login password, if the check is restored | 1Password `Employee` vault, item `zwusu5ixh4ims2m3x4oegzobey` |
 | Build guide for customers | `README.md` in this repo |
 
-Verify the app end to end after any auth change:
+Verify the app end to end after any auth change. This mints a session directly
+rather than signing in, so it needs no password - it is testing that
+`/api/embed-token` takes identity from the session and not from the body:
 
 ```bash
 npm run server
-python3 - <<'EOF'
-import json, urllib.request, ssl
-ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-def post(p,b,h=None):
-    r=urllib.request.Request("https://localhost:5173"+p, data=json.dumps(b).encode(),
-        headers={"Content-Type":"application/json", **(h or {})})
-    return json.load(urllib.request.urlopen(r, context=ctx))
-s=post("/api/login", {"email":"mdiazmartinez@shelfoptix.com","password":"anything"})
-d=post("/api/embed-token", {"user":"masterview"}, {"Authorization":"Bearer "+s["session"]})
-print("minted for:", d["payload"]["embed_user_id"], "(must be myri, not masterview)")
-print("scope:", d["payload"]["user_attributes"])
-EOF
+node --input-type=module -e '
+import "dotenv/config";
+import jwt from "jsonwebtoken";
+const key = process.env.HOLISTICS_SHELFOPTIX_PORTAL_KEY;
+for (const id of ["amit", "randy", "myri", "masterview"]) {
+  const s = jwt.sign({ sub: id }, process.env.SHELFOPTIX_SESSION_SECRET, { algorithm: "HS256", expiresIn: "5m" });
+  const r = await fetch("http://localhost:3001/api/embed-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + s },
+    body: JSON.stringify({ user: "masterview" }),        // ignored, and that is the point
+  });
+  const j = await r.json();
+  if (j.error) { console.log(id.padEnd(11), "ERROR", j.error); continue; }
+  console.log(
+    id.padEnd(11),
+    "portal:" + (j.embedUrl.split("/embed/")[1].split("?")[0] === key ? "explorer" : "view"),
+    "minted_for:" + j.payload.embed_user_id,           // must equal id, never masterview
+    "role:" + j.payload.permissions.org_workspace_role,
+    JSON.stringify(j.payload.user_attributes),
+  );
+}
+'
 ```
