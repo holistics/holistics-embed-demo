@@ -121,10 +121,35 @@ export const USERS = [
 export const PORTAL = "retailfocus_portal";
 export const VIEW_PORTAL = "retailfocus_view_portal";
 
+// ---------------------------------------------------------------------
+// TEMPORARY, set 19 Aug 2026. REVERT TO false WHEN THE PORTAL IS PUBLISHED.
+//
+// retailfocus_view_portal exists as AML but has never been published, so it
+// has no embed credentials and viewers could not sign in at all. While this
+// is true, viewers are routed to the EXPLORER portal so they can work.
+//
+// READ THIS BEFORE SHOWING THE APP TO ANYONE. That portal lists the dataset,
+// and a portal that lists a dataset grants self-serve exploration to
+// everyone who opens it. So Myri can currently explore the dataset, which is
+// the exact thing retailfocus_view_portal exists to prevent. Exploration is
+// not a token flag; nothing in the payload can withhold it.
+//
+// What DOES still hold, because those are token-level:
+//   settings.ai.enabled                    false for her, so no Ask AI
+//   permissions.enable_personal_workspace  false, so she can save nothing
+//   permissions.org_workspace_role         no_access
+//   user_attributes                        her three departments, GA/TN/KY
+//
+// So she is an explorer with the AI switch off and no workspaces, not a
+// dashboard-only user. Row scoping is unaffected and still enforced.
+// ---------------------------------------------------------------------
+const VIEW_PORTAL_UNAVAILABLE = true;
+
 export function portalFor(user) {
-  return user.capability === "explorer"
-    ? { name: PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_PORTAL" }
-    : { name: VIEW_PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_VIEW_PORTAL" };
+  if (user.capability === "explorer" || VIEW_PORTAL_UNAVAILABLE) {
+    return { name: PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_PORTAL" };
+  }
+  return { name: VIEW_PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_VIEW_PORTAL" };
 }
 
 export const CAPABILITY_LABEL = {
