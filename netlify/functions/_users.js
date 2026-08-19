@@ -195,9 +195,25 @@ export function buildPayload(user) {
     // Explorers can keep what they build, privately and in their org's
     // shared workspace. The Standard view gets neither: no personal space,
     // no shared workspace, which is what "traditional dashboard" means here.
+    // org_workspace_role is about the SHARED workspace only, and is a
+    // different axis from exploration:
+    //   no_access  cannot see the shared workspace at all
+    //   viewer     can open dashboards saved there, cannot create or edit
+    //   editor     can create, edit and delete there
+    //
+    // Viewers get 'viewer', not 'no_access'. Myri's persona is the standard
+    // dashboard user, and someone who can open what the team publishes but
+    // cannot build is a truer reading of that than someone locked out of the
+    // shared space entirely. She still gets no personal workspace, so she
+    // can save nothing of her own.
+    //
+    // This does not leak rows. A shared dashboard re-runs its queries as
+    // whoever opens it, under their own store_state and dept, so she sees
+    // Amit's dashboard through her own three departments. Randy is on a
+    // different orgId and is isolated from all of them regardless.
     permissions: isExplorer
       ? { enable_personal_workspace: true, org_workspace_role: "editor" }
-      : { enable_personal_workspace: false, org_workspace_role: "no_access" },
+      : { enable_personal_workspace: false, org_workspace_role: "viewer" },
 
     settings: {
       ai: { enabled: isExplorer },

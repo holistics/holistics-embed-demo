@@ -169,10 +169,16 @@ if (!vault) {
 }
 
 if (!dryRun) {
+  // `op whoami` reports "not signed in" even when desktop app integration is
+  // working, so it is a useless gate. Reading the target vault checks the
+  // two things that actually matter: we are authorised, and the vault exists
+  // before we start writing items into it.
   try {
-    op(["whoami"]);
-  } catch {
-    console.error("1Password CLI is not signed in. Run `op signin` first.");
+    op(["vault", "get", vault]);
+  } catch (err) {
+    console.error(`Cannot read vault "${vault}".`);
+    console.error("Run `op signin`, then `op vault list` to check the name.");
+    console.error(String(err.stderr || err.message).trim().split("\n").slice(-2).join("\n"));
     process.exit(1);
   }
 }
