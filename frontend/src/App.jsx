@@ -38,11 +38,11 @@ const scopeText = (v) => (v === ALL ? "All" : Array.isArray(v) ? v.join(", ") : 
 
 // Every /api call goes through this instead of res.json().
 //
-// This app needs TWO processes: vite on :5173 and the Express backend on
-// :3001, which vite proxies /api to. With the backend down the proxy hands
-// back an empty body, res.json() throws "Unexpected end of JSON input", and
-// nothing in that message points at the missing server. The same thing
-// happens on a 502 or if the backend restarts mid-request.
+// Locally this app needs TWO processes: vite on :5173 and the Express
+// backend on :3001, which vite proxies /api to. With the backend down the
+// proxy hands back an empty body, res.json() throws "Unexpected end of
+// JSON input", and nothing in that message points at the missing server.
+// The same happens on a 502, or on Vercel if a function cold-starts badly.
 //
 // Reading the text first costs nothing and lets the failure name itself.
 async function readJson(res) {
@@ -73,13 +73,12 @@ function CapabilityBadge({ capability, label }) {
 }
 
 // --- Login -----------------------------------------------------------
-// A dropdown of emails. The password field is kept because the demo is
-// partly about showing a host app authenticating a user, but the check is
-// stubbed server-side -- anything signs in, empty included.
+// Typed email and password. Each account has its own password, checked
+// server-side against a per-account scrypt hash; there is no shared one.
 //
-// The rest of the flow is unchanged and still worth showing: sign-in
-// returns a signed session, and /api/embed-token derives the identity
-// from that signature rather than from the request body.
+// Sign-in returns a signed session, and /api/embed-token derives the
+// identity from that signature rather than from the request body, so the
+// browser cannot ask for another account's scope.
 function LoginScreen({ onSignIn, error, submitting }) {
   // A plain typed sign-in. This was a dropdown of the four accounts, which
   // meant the login screen had to be handed the account list -- real

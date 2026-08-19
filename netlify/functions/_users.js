@@ -18,8 +18,8 @@
 //              how Masterview sees everything without a special case.
 //
 // AGENTIC CAPABILITY
-// One portal, four users, differentiated by the token. Per the embed
-// parameters reference these are the per-user knobs:
+// Two portals, four users. Per the embed parameters reference these are
+// the per-user knobs the token controls:
 //
 //   settings.ai.enabled                    Ask AI
 //   permissions.enable_personal_workspace  save privately
@@ -31,10 +31,10 @@
 //
 // WHAT THE TOKEN CANNOT DO. Self-serve exploration is not a per-user
 // switch anywhere in the docs; it exists because the dataset is listed
-// in the portal, for everyone who reaches that portal. Myri therefore
-// gets no AI and can save nothing, but ad-hoc exploration is not
-// provably withheld from her. The only documented way to withhold it is
-// a second portal without the dataset.
+// in the portal, for everyone who reaches that portal. That is why the
+// capability field picks the PORTAL as well as the token settings -- see
+// portalFor() below. Withholding exploration from Myri is not something
+// her token can do; it is done by sending her somewhere else.
 //
 // ORG ID
 // orgId becomes embed_org_id, the shared-workspace boundary: same orgId
@@ -106,9 +106,6 @@ export const USERS = [
   },
 ];
 
-// One portal for everyone. The Explorer/Standard split is expressed in
-// the token's settings and permissions, not by pointing at a second
-// portal object.
 // TWO PORTALS, PICKED BY CAPABILITY.
 //
 // Exploration is not a token flag. Per the docs, a portal that LISTS a
@@ -160,7 +157,7 @@ export function buildPayload(user) {
     object_type: "EmbedPortal",
 
     // Identity. embed_user_id keys the user's saved work, so it has to be
-    // stable per person — the login dropdown sends this id, never the name.
+    // stable per person. It comes from the session, never from the browser.
     embed_user_id: user.id,
     embed_user_email: user.email,
 
