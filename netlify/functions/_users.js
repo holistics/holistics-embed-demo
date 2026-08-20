@@ -27,7 +27,9 @@
 //   user_attributes                        which rows
 //
 // Self-Serve (Explorer)          -> editor + Ask AI + personal workspace
-// Standard/Traditional Dashboard -> no_access, no AI, no saving
+// Standard/Traditional Dashboard -> viewer, no AI, no personal workspace
+//                                   (viewer, not no_access: she opens what
+//                                   the org publishes, she just cannot build)
 //
 // WHAT THE TOKEN CANNOT DO. Self-serve exploration is not a per-user
 // switch anywhere in the docs; it exists because the dataset is listed
@@ -44,12 +46,32 @@
 // It is a field on the user rather than a slug of the display name so
 // that renaming "ShelfOptix" cannot silently re-home saved work.
 //
+// ONE ORG FOR THE WHOLE PROGRAMME, set 20 Aug 2026. All four users carry
+// SHELFOPTIX_ORG, so the RetailFocus programme has ONE shared workspace:
+// what Amit or Masterview publishes to it, Myri and Randy can open.
+//
+// Note the boundary is the PROGRAMME, not the employer. Randy is at
+// RetailGIS and still sits in this org, because the thing being shared is
+// the P&G work, not his company's. His `org` display name is left alone --
+// that is who he works for, and the login screen should say so.
+//
+// Before splitting anyone back out, read this: per the docs, user + org
+// together key the personal workspace, so changing a user's orgId gives
+// them a NEW empty personal workspace and strands whatever they saved
+// under the old one. It is not a reversible toggle once someone has
+// saved work.
+//
 // Row scoping is unaffected by any of this: a shared dashboard re-runs
 // its queries as whoever opens it, under their own store_state and dept,
-// so sharing a workspace never shares rows.
+// so sharing a workspace never shares rows. Randy opening Amit's
+// dashboard sees TN/KY, not GA.
 // =====================================================================
 
 export const ALL = "__ALL__";
+
+// embed_org_id for every user: one shared workspace for the RetailFocus
+// programme. Named once so nobody can half-move a user out of it.
+export const SHELFOPTIX_ORG = "shelfoptix";
 
 // The five departments the field team covers. Named once so Amit and
 // Randy cannot drift apart.
@@ -69,7 +91,7 @@ export const USERS = [
     name: "Amit",
     email: "amarty@shelfoptix.com",
     org: "ShelfOptix",
-    orgId: "shelfoptix",
+    orgId: SHELFOPTIX_ORG,
     states: ["GA"],
     depts: FIELD_DEPTS,
     capability: "explorer",
@@ -79,7 +101,7 @@ export const USERS = [
     name: "Randy",
     email: "rwilson@retailgis.com",
     org: "RetailGIS",
-    orgId: "retailgis",
+    orgId: SHELFOPTIX_ORG,
     states: ["TN", "KY"],
     depts: FIELD_DEPTS,
     capability: "explorer",
@@ -89,7 +111,7 @@ export const USERS = [
     name: "Myri",
     email: "mdiazmartinez@shelfoptix.com",
     org: "ShelfOptix",
-    orgId: "shelfoptix",
+    orgId: SHELFOPTIX_ORG,
     states: ["GA", "TN", "KY"],
     depts: CARE_DEPTS,
     capability: "viewer",
@@ -99,7 +121,7 @@ export const USERS = [
     name: "Masterview",
     email: "mv@shelfoptix.com",
     org: "ShelfOptix",
-    orgId: "shelfoptix",
+    orgId: SHELFOPTIX_ORG,
     states: ALL,
     depts: ALL,
     capability: "explorer",
@@ -209,8 +231,9 @@ export function buildPayload(user) {
     //
     // This does not leak rows. A shared dashboard re-runs its queries as
     // whoever opens it, under their own store_state and dept, so she sees
-    // Amit's dashboard through her own three departments. Randy is on a
-    // different orgId and is isolated from all of them regardless.
+    // Amit's dashboard through her own three departments. That holds for
+    // everyone now that all four share one org (see ORG ID above): the
+    // workspace is shared, the rows are not.
     permissions: isExplorer
       ? { enable_personal_workspace: true, org_workspace_role: "editor" }
       : { enable_personal_workspace: false, org_workspace_role: "viewer" },
