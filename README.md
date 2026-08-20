@@ -302,15 +302,13 @@ SHELFOPTIX_PW_AMIT=scrypt$...               # one per account, see below
 SHELFOPTIX_PW_RANDY=scrypt$...
 SHELFOPTIX_PW_MYRI=scrypt$...
 SHELFOPTIX_PW_MASTERVIEW=scrypt$...
-HOLISTICS_SHELFOPTIX_PORTAL_KEY=...         # retailfocus_portal, explorers
+HOLISTICS_SHELFOPTIX_PORTAL_KEY=...         # the workspace pair, both portals
 HOLISTICS_SHELFOPTIX_PORTAL_SECRET=...
-HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY=...    # retailfocus_view_portal, viewers
-HOLISTICS_SHELFOPTIX_VIEW_PORTAL_SECRET=...
 SHELFOPTIX_SESSION_SECRET=...               # openssl rand -hex 48
 HOLISTICS_HOST=https://your-tenant.holistics.io
 ```
 
-**Two portals, two credential pairs.** Embed credentials are per portal, not per tenant. `portalFor()` in `_users.js` routes explorers to `retailfocus_portal` and viewers to `retailfocus_view_portal`, and the token is signed with that portal's own secret. Sign a viewer against the explorer portal and they get exploration back.
+**Two portals, one credential pair.** Embed credentials belong to the workspace, not to the portal. `portalFor()` in `_users.js` routes explorers to `retailfocus_portal` and viewers to `retailfocus_view_portal`, and both tokens are signed with the same secret and opened at the same key - `object_name` inside the token is what selects the portal. Verified against a live tenant on 20 August 2026. What decides a user's capability is that field, so getting it wrong hands a viewer exploration back.
 
 ## Passwords
 
@@ -356,8 +354,7 @@ Netlify, Vercel and local Express entrypoints cannot drift.
 
 | Variable | Why |
 |---|---|
-| `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET` | `retailfocus_portal` — explorers |
-| `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY` / `_SECRET` | `retailfocus_view_portal` — viewers |
+| `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET` | The workspace pair. Signs tokens for both portals |
 | `SHELFOPTIX_SESSION_SECRET` | Signs the session. `openssl rand -hex 48` |
 | `SHELFOPTIX_PW_<ID>` | One scrypt hash per account: `_AMIT`, `_RANDY`, `_MYRI`, `_MASTERVIEW`. **Boot fails in production if any is missing** |
 | `HOLISTICS_HOST` | e.g. `https://us.holistics.io` |
@@ -396,8 +393,8 @@ An empty group in a dataset `view {}` block. Delete metrics from a group and you
 **A "dashboard only" user can still explore the dataset**
 Exploration is not a token flag. Per the docs, a portal that lists a dataset gives exploration to everyone who opens it; omitting the dataset is the only documented way to withhold it. `settings.ai.enabled` and `permissions` are per user; exploration is per portal. Route that user to a portal with no dataset in it.
 
-**`Missing HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY / _SECRET for portal 'retailfocus_view_portal'`**
-The dashboard-only portal has not been published, or embedding has not been enabled on it. Publish it, then Tools > Embedded Analytics > Enable, and copy that portal's own Key ID and Secret. They are not the same as the explorer portal's.
+**`Missing ..._KEY / _SECRET for portal 'X'`**
+The env var pair `portalFor()` asked for is unset. Nothing here needs a second pair: one workspace pair signs tokens for every portal, and the portal is chosen by `object_name`. If you see this naming a `VIEW_PORTAL` variable, you are running code from before 20 August 2026 - restart the server, or redeploy.
 
 **`Failed to execute 'json' on 'Response': Unexpected end of JSON input`**
 The Express backend is not running. Vite is up on :5173 and proxies `/api` to :3001, so with nothing listening there every call returns an empty body and `res.json()` fails on it. Start `npm run server` in a second terminal. Since the app fetches `/api/config` on mount, this fires on page load rather than when you sign in. `readJson()` in `App.jsx` now catches this and says so; if you see the raw browser message instead, something is calling `res.json()` directly.

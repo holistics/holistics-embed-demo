@@ -95,7 +95,13 @@ Explorer → `org_workspace_role: editor`, AI on, personal workspace. Standard �
 
 `viewer`, not `no_access`, since commit `d0ef22b`: Myri can open what her org publishes to the shared workspace but cannot create or edit there, which is a truer reading of "standard dashboard user" than being locked out of it. It leaks no rows - a shared dashboard re-runs under whoever opens it, so she sees Amit's dashboard through her own three departments. The reasoning is in `buildPayload()` in `_users.js`.
 
-**Both capabilities currently go to `retailfocus_portal`.** `retailfocus_view_portal` is written but never published, so it has no embed credentials, and `VIEW_PORTAL_UNAVAILABLE = true` in `_users.js` routes viewers to the explorer portal instead. That portal lists the dataset, so **Myri can explore** - the one thing the view portal exists to prevent, and not something any token flag can withhold. Open as of 20 Aug 2026, being picked up with Tai. To revert: publish the portal, fill the two empty `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_*` values in `.env`, set the flag to `false`.
+**Each capability has its own portal.** Explorers go to `retailfocus_portal`
+(dashboard + dataset), viewers to `retailfocus_view_portal` (dashboard only).
+That is the only mechanism that withholds exploration - it is not a token flag.
+Both are signed with the SAME workspace credential pair; `object_name` in the
+token picks the portal. Verified live 20 Aug 2026: Myri's panel shows Standard
+dashboards and Shared workspace, no Explore data, all four dashboard tabs
+present, KPIs rendering under her scope.
 
 **One org for all four.** Every user carries `embed_org_id: 'shelfoptix'` (the
 `SHELFOPTIX_ORG` constant), so the programme has a single shared workspace:
@@ -136,7 +142,7 @@ npm run dev          # terminal 2 — app on https://localhost:5173
 
 Accept the self-signed certificate warning. Sign in with any of the four emails and anything at all in the password field.
 
-`.env` needs `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET`, `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY` / `_SECRET`, `SHELFOPTIX_SESSION_SECRET`, `SHELFOPTIX_DEMO_PASSWORD` and `HOLISTICS_HOST`. `SHELFOPTIX_DEMO_PASSWORD` **is** read again as of 19 Aug 2026 — the stubbed password check was restored, and the app refuses to boot in production without it.
+`.env` needs `HOLISTICS_SHELFOPTIX_PORTAL_KEY` / `_SECRET` (one pair, both portals), `SHELFOPTIX_SESSION_SECRET`, `SHELFOPTIX_DEMO_PASSWORD` and `HOLISTICS_HOST`. `SHELFOPTIX_DEMO_PASSWORD` **is** read again as of 19 Aug 2026 — the stubbed password check was restored, and the app refuses to boot in production without it.
 
 Stop both:
 
@@ -169,7 +175,7 @@ npx serve dist -l 4173     # plus `npm run server`, and a proxy for /api/*
 
 **Two legacy function directories exist.** See item 2 above.
 
-**A running `backend/server.js` does not pick up code changes.** There is no watcher on it. A process started before `VIEW_PORTAL_UNAVAILABLE` was added kept routing Myri to the unpublished portal and returning `Missing HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY / _SECRET`, with the fix already sitting in the file. If behaviour does not match the code, restart the server before debugging anything else.
+**A running `backend/server.js` does not pick up code changes.** There is no watcher on it. On 19 Aug a process started before a routing fix kept returning a missing-credentials error for Myri with the fix already sitting in the file, and the same class of thing happened again on the deployed app, which is CLI-deployed and had built older source. If behaviour does not match the code: restart the server, and check what is actually deployed, before debugging anything else.
 
 ---
 
