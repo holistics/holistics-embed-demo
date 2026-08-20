@@ -136,42 +136,33 @@ export const USERS = [
 // but not exploration. So "Standard/Traditional Dashboard View" is only
 // true if that user is sent to a portal with no dataset in it.
 //
-// Each portal carries its own Key ID and Secret, so routing a user also
-// means signing with a different secret. portalFor() returns the env var
-// suffix; the request handler resolves the pair and fails loudly if it is
-// missing rather than minting a token against the wrong portal.
+// retailfocus_portal      dashboard + dataset   -> explorers
+// retailfocus_view_portal dashboard only        -> viewers
+//
+// ONE CREDENTIAL PAIR, NOT ONE PER PORTAL. Corrected 20 Aug 2026, after
+// commit 6d2dea9 had it the other way round and cost an evening: viewers
+// 500'd on a missing HOLISTICS_SHELFOPTIX_VIEW_PORTAL_KEY that does not
+// need to exist.
+//
+// Verified against the live tenant the moment retailfocus_view_portal was
+// published: a token naming it, signed with HOLISTICS_SHELFOPTIX_PORTAL_SECRET
+// and opened at HOLISTICS_SHELFOPTIX_PORTAL_KEY, loads the dashboard-only
+// portal. The pair belongs to the WORKSPACE; object_name inside the token is
+// what selects the portal.
+//
+// So routing a user is one field in the payload, not a different secret. If
+// a future portal genuinely needs its own pair, give portalFor() a different
+// envPrefix for it -- the handlers already read the prefix per request.
 export const PORTAL = "retailfocus_portal";
 export const VIEW_PORTAL = "retailfocus_view_portal";
 
-// ---------------------------------------------------------------------
-// TEMPORARY, set 19 Aug 2026. REVERT TO false WHEN THE PORTAL IS PUBLISHED.
-//
-// retailfocus_view_portal exists as AML but has never been published, so it
-// has no embed credentials and viewers could not sign in at all. While this
-// is true, viewers are routed to the EXPLORER portal so they can work.
-//
-// READ THIS BEFORE SHOWING THE APP TO ANYONE. That portal lists the dataset,
-// and a portal that lists a dataset grants self-serve exploration to
-// everyone who opens it. So Myri can currently explore the dataset, which is
-// the exact thing retailfocus_view_portal exists to prevent. Exploration is
-// not a token flag; nothing in the payload can withhold it.
-//
-// What DOES still hold, because those are token-level:
-//   settings.ai.enabled                    false for her, so no Ask AI
-//   permissions.enable_personal_workspace  false, so she can save nothing
-//   permissions.org_workspace_role         no_access
-//   user_attributes                        her three departments, GA/TN/KY
-//
-// So she is an explorer with the AI switch off and no workspaces, not a
-// dashboard-only user. Row scoping is unaffected and still enforced.
-// ---------------------------------------------------------------------
-const VIEW_PORTAL_UNAVAILABLE = true;
+const WORKSPACE_ENV_PREFIX = "HOLISTICS_SHELFOPTIX_PORTAL";
 
 export function portalFor(user) {
-  if (user.capability === "explorer" || VIEW_PORTAL_UNAVAILABLE) {
-    return { name: PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_PORTAL" };
-  }
-  return { name: VIEW_PORTAL, envPrefix: "HOLISTICS_SHELFOPTIX_VIEW_PORTAL" };
+  return {
+    name: user.capability === "explorer" ? PORTAL : VIEW_PORTAL,
+    envPrefix: WORKSPACE_ENV_PREFIX,
+  };
 }
 
 export const CAPABILITY_LABEL = {
