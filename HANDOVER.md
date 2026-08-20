@@ -97,6 +97,21 @@ Explorer â†’ `org_workspace_role: editor`, AI on, personal workspace. Standard â
 
 **Both capabilities currently go to `retailfocus_portal`.** `retailfocus_view_portal` is written but never published, so it has no embed credentials, and `VIEW_PORTAL_UNAVAILABLE = true` in `_users.js` routes viewers to the explorer portal instead. That portal lists the dataset, so **Myri can explore** - the one thing the view portal exists to prevent, and not something any token flag can withhold. Open as of 20 Aug 2026, being picked up with Tai. To revert: publish the portal, fill the two empty `HOLISTICS_SHELFOPTIX_VIEW_PORTAL_*` values in `.env`, set the flag to `false`.
 
+**One org for all four.** Every user carries `embed_org_id: 'shelfoptix'` (the
+`SHELFOPTIX_ORG` constant), so the programme has a single shared workspace:
+what Amit or Masterview publishes there, Randy and Myri can open. Randy used to
+sit in `retailgis` and was cut off from it; his `org` display name is still
+RetailGIS, because that is his employer - the org id is the programme, not the
+company. Verified live 20 Aug 2026: Randy's panel shows Shared workspace with a
+create button plus a Personal workspace; Myri's shows Shared workspace with no
+create button and no Personal workspace at all, matching `viewer` +
+`enable_personal_workspace: false`.
+
+Per the [identity docs](https://docs.holistics.io/embedded/identity-workspace),
+user id + org id together key the personal workspace, so **changing someone's
+org id hands them a new empty one and strands whatever they saved under the old
+one.** Not a toggle to flip casually once people have saved work.
+
 **Adding or changing a user** is one edit to that file plus a restart of `npm run server`. No AML change: the permissions match whatever the token carries.
 
 ---
