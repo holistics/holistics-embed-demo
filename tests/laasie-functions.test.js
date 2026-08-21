@@ -54,9 +54,10 @@ test("builds a tenant-scoped, subscription-enabled payload", () => {
   assert.equal(payload.settings.allow_dashboard_export, true);
   assert.equal(payload.settings.allow_data_subscribe, true);
   assert.equal(payload.settings.allow_raw_data_export, true);
+  assert.equal(payload.settings.dashboard_autorun_on_changes, true);
   assert.deepEqual(payload.permissions, {
-    enable_personal_workspace: false,
-    org_workspace_role: "no_access",
+    enable_personal_workspace: true,
+    org_workspace_role: "editor",
   });
   assert.equal(payload.exp - payload.iat, 3600);
 });
@@ -82,6 +83,8 @@ test("creates a deep link without exposing the signing secret or subscription em
   assert.deepEqual(session.payloadPreview, {
     object_name: "laasie_portal",
     object_type: "EmbedPortal",
+    embed_user_id: "laasie-cardinal-peak-demo-user",
+    embed_org_id: "laasie-cardinal-peak-demo-org",
     settings: payload.settings,
     permissions: payload.permissions,
     user_attributes: payload.user_attributes,

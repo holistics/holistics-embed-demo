@@ -67,12 +67,12 @@ export function buildPayload(identity, subscriptionEmail, issuedAt = Math.floor(
       allow_raw_data_export: true,
       allow_data_subscribe: true,
       allow_dashboard_timezone_change: false,
-      dashboard_autorun_on_changes: false,
+      dashboard_autorun_on_changes: true,
       hide_dashboard_filters_controls_panel: false,
     },
     permissions: {
-      enable_personal_workspace: false,
-      org_workspace_role: "no_access",
+      enable_personal_workspace: true,
+      org_workspace_role: "editor",
     },
     user_attributes: {
       company_id: [...identity.companyIds],
@@ -83,9 +83,25 @@ export function buildPayload(identity, subscriptionEmail, issuedAt = Math.floor(
 }
 
 function getPayloadPreview(payload) {
-  const { object_name, object_type, settings, permissions, user_attributes } = payload;
+  const {
+    object_name,
+    object_type,
+    embed_user_id,
+    embed_org_id,
+    settings,
+    permissions,
+    user_attributes,
+  } = payload;
 
-  return { object_name, object_type, settings, permissions, user_attributes };
+  return {
+    object_name,
+    object_type,
+    embed_user_id,
+    embed_org_id,
+    settings,
+    permissions,
+    user_attributes,
+  };
 }
 
 export async function signPayload(payload, secret) {
