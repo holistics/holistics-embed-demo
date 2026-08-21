@@ -374,9 +374,9 @@ export default function App() {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 p-6 overflow-auto bg-slate-50 relative">
+          <main className="flex-1 p-4 overflow-auto bg-slate-50 relative">
             {activePage === "custom" ? (
-              <div className="max-w-6xl mx-auto h-full flex flex-col gap-4">
+              <div className="max-w-[1400px] mx-auto h-full flex flex-col gap-4">
                 <div className="flex gap-2 items-start">
                   <textarea
                     value={customEmbedUrl}
@@ -431,7 +431,13 @@ export default function App() {
                 </p>
               </div>
             ) : (
-              <div className="max-w-6xl mx-auto h-full flex flex-col">
+              <div className="max-w-[1400px] mx-auto h-full flex flex-col">
+                {/* 1400, not max-w-6xl. The RetailFocus dashboard is a CanvasLayout
+                    with width: 1300, so a 1152px container clipped 150px off its
+                    right edge while leaving 512px of the main area unused.
+                    Measured on a 1920 viewport: container 1152, iframe 1150,
+                    canvas 1300. Below roughly 1550px of viewport the sidebar has
+                    to be collapsed for the whole canvas to fit. */}
                 <div className="bg-white rounded-lg shadow-sm border border-slate-200 flex-1 overflow-hidden relative flex flex-col">
                   <div className="h-10 bg-slate-100 border-b border-slate-200 flex items-center px-4 gap-2">
                     <div className="flex gap-1.5">
