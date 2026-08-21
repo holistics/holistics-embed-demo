@@ -1,72 +1,46 @@
-function base64url(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const b of bytes) {
-    binary += String.fromCharCode(b);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import { createEmbedSession } from "../_lib/scsi.js";
 
-function base64urlEncode(str) {
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-async function signJwt(payload, secret) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const encodedHeader = base64urlEncode(JSON.stringify(header));
-  const encodedPayload = base64urlEncode(JSON.stringify(payload));
-  const signingInput = `${encodedHeader}.${encodedPayload}`;
-
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(signingInput));
-
-  return `${signingInput}.${base64url(signature)}`;
-}
+const RESPONSE_HEADERS = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+};
 
 export async function onRequestPost(context) {
-  const EMBED_KEY = context.env.HOLISTICS_EMBED_KEY;
-  const EMBED_SECRET = context.env.HOLISTICS_EMBED_SECRET;
+  let body;
 
-  const { portal, user, data_source, url_suffix } = await context.request.json();
-
-  if (!portal) {
-    return Response.json({ error: "portal is required" }, { status: 400 });
+  try {
+    body = await context.request.json();
+  } catch {
+    return Response.json({ error: "Request body must be valid JSON" }, { status: 400, headers: RESPONSE_HEADERS });
   }
 
-  const payload = {
-    object_name: portal,
-    object_type: "EmbedPortal",
-    embed_user_id: user?.id,
-    embed_user_email: user?.email,
-    settings: {
-      ai: { enabled: true },
-      allow_dashboard_export: true,
-      allow_raw_data_export: true,
-      allow_data_subscribe: true,
-    },
-    user_attributes: {
-      vendor_id: "__ALL__",
-      country: "__ALL__",
-      city: "__ALL__",
-      ...(data_source && { data_source: [data_source] }),
-    },
-    permissions: {
-      enable_personal_workspace: true,
-    },
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    typeof body.identity_id !== "string"
+  ) {
+    return Response.json(
+      { error: "identity_id is the only accepted field" },
+      { status: 400, headers: RESPONSE_HEADERS },
+    );
+  }
 
-  const token = await signJwt(payload, EMBED_SECRET);
-  const embedUrl = `https://demo4.holistics.io/embed/${EMBED_KEY}${url_suffix || ""}?_token=${token}&left_panel_state=collapsed`;
+  try {
+    const session = await createEmbedSession({
+      identityId: body.identity_id,
+      embedKey: context.env.HOLISTICS_EMBED_KEY,
+      embedSecret: context.env.HOLISTICS_EMBED_SECRET,
+    });
 
-  return Response.json({ embedUrl });
+    return Response.json(session, { headers: RESPONSE_HEADERS });
+  } catch (error) {
+    const isUnknownIdentity = error.message === "Unknown identity";
+
+    return Response.json(
+      { error: isUnknownIdentity ? "Unknown identity" : "Embed session is unavailable" },
+      { status: isUnknownIdentity ? 400 : 500, headers: RESPONSE_HEADERS },
+    );
+  }
 }

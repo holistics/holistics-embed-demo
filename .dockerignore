@@ -1,0 +1,7 @@
+.git
+.amp
+.playwright-cli
+.wrangler
+node_modules
+dist
+*.log

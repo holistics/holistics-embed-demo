@@ -8,5 +8,6 @@ export default defineConfig({
   plugins: [react(), basicSsl()],
   build: {
     outDir: '../dist',
+    emptyOutDir: true,
   },
 })

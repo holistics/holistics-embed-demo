@@ -1,20 +1,17 @@
 {
-  "name": "holistics-embed-demo",
+  "name": "scsi-client-portal",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --config frontend/vite.config.js",
-    "server": "node backend/server.js",
     "build": "vite build --config frontend/vite.config.js",
     "lint": "eslint --config frontend/eslint.config.js frontend/",
-    "preview": "vite preview --config frontend/vite.config.js"
+    "preview": "npm run build && node container-server.mjs",
+    "test": "node --test tests/*.test.js",
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

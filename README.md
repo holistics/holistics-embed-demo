@@ -1,96 +1,63 @@
-# Holistics Embed Demo
+# SCSI Collections client portal
 
-A demo app showing how to securely embed [Holistics](https://www.holistics.io/) analytics portals into a React application using JWT-based authentication.
+A focused React prototype that embeds the Holistics `scsi_portal` for two synthetic creditor clients.
 
-**Live URL**: https://holistics-embed-demo.pages.dev
+The portal opens the published `scsi_client_portal` object. The React app owns navigation and display state; the container API owns the identity mapping, permission payload, JWT signing, and embed URL.
 
-![](./holistics-embed-demo.png)
+## Access model
 
-## Tech Stack
+The browser submits only an identity ID to `/api/embed-token`. The server owns the permission mapping and signs a one-hour Holistics embed JWT.
 
-- **Frontend**: React, Vite, Tailwind CSS
-- **Backend**: Node.js, Express, `jsonwebtoken`
-- **Deployment**: Cloudflare Pages + Pages Functions
+| Identity | Signed user attributes | Debtor State |
+| --- | --- | --- |
+| Riverside Regional Medical Center | `scsi_client_id: [3]`, `pii_access: [1]` | visible |
+| Harborline Auto Finance | `scsi_client_id: [4]`, `pii_access: [0]` | redacted |
 
-## Project Structure
+Dashboard export, raw-data export, subscriptions, and workspace access remain disabled for every signed session.
 
-```
-├── backend/
-│   └── server.js            # Express API server (local dev)
-├── frontend/
-│   ├── functions/api/        # Cloudflare Pages Functions (production)
-│   ├── src/                  # React app source
-│   ├── public/               # Static assets
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   └── eslint.config.js
-├── functions/                # Cloudflare Pages Functions (deploy copy)
-└── package.json
+## Project structure
+
+```text
+frontend/src/App.jsx         App shell and session lifecycle
+frontend/src/PortalPages.jsx Portal, identity guide, and custom embed views
+frontend/src/scsi-api.js     Browser-to-server API contract
+functions/_lib/scsi.js       Approved identities and signed payload policy
+functions/api/               Runtime-independent API handlers
+container-server.mjs         Proto HTTP and static-file server
+Dockerfile                   Production image definition
+tests/                       Server permission and endpoint tests
 ```
 
-## Getting Started
+## Development
 
-### 1. Install dependencies
+Install dependencies and run all automated checks:
 
-```bash
+```sh
 npm install
+npm run check
 ```
 
-### 2. Configure environment variables
+`npm run dev` runs the Vite frontend only. To exercise the production server, run:
 
-Create a `.env` file in the project root:
-
-```env
-HOLISTICS_EMBED_KEY=your_embed_key_here
-HOLISTICS_EMBED_SECRET=your_embed_secret_here
+```sh
+npm run preview
 ```
 
-### 3. Start the backend server
+The server expects `HOLISTICS_EMBED_KEY` and `HOLISTICS_EMBED_SECRET` in its runtime environment. Keep local references in an ignored environment file as `op://` references and resolve them only at execution time.
 
-```bash
-npm run server
-# → http://localhost:3001
+## Deployment
+
+Proto serves the frontend and API from one `linux/amd64` container. Deployments use the `holistics-embed-demo` application and its matching item in the `kubernetes-internal-prototypes` 1Password vault.
+
+Build and push an immutable image, then create or update the Proto preview PR with its digest:
+
+```sh
+proto deploy \
+  --image ghcr.io/holistics/holistics-embed-demo@sha256:<digest> \
+  --name holistics-embed-demo \
+  --port 8080 \
+  --secret HOLISTICS_EMBED_KEY \
+  --secret HOLISTICS_EMBED_SECRET
 ```
 
-### 4. Start the frontend (in a separate terminal)
-
-```bash
-npm run dev
-# → https://localhost:5173
-```
-
-Open <https://localhost:5173> in your browser. Accept the self-signed certificate warning.
-
-## Deployment (Cloudflare Pages)
-
-The app is deployed to Cloudflare Pages with serverless functions handling the API.
-
-**Live URL**: https://holistics-embed-demo.pages.dev
-
-### Deploy manually
-
-```bash
-# Build the frontend
-npm run build
-
-# Copy functions to root (Cloudflare expects functions/ as sibling to output dir)
-cp -r frontend/functions functions
-
-# Deploy
-CLOUDFLARE_ACCOUNT_ID=<your_account_id> wrangler pages deploy dist \
-  --project-name holistics-embed-demo \
-  --branch main \
-  --commit-dirty=true
-```
-
-### Set secrets
-
-```bash
-echo -n 'your_key' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
-  wrangler pages secret put HOLISTICS_EMBED_KEY --project-name holistics-embed-demo
-
-echo -n 'your_secret' | CLOUDFLARE_ACCOUNT_ID=<your_account_id> \
-  wrangler pages secret put HOLISTICS_EMBED_SECRET --project-name holistics-embed-demo
-```
+`proto deploy` does not publish production immediately. Verify the preview at <https://holistics-embed-demo.pages.holistics.dev> and merge its deployment PR only after explicit approval.
