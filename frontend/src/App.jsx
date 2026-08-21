@@ -218,7 +218,6 @@ export default function App() {
                 configState={configState}
                 sessionState={sessionState}
                 embedUrl={session?.embedUrl || ""}
-                expiresAt={session?.expiresAt || ""}
                 error={error}
                 onConfigRetry={() => setConfigAttempt((attempt) => attempt + 1)}
                 onSessionRetry={() => setSessionAttempt((attempt) => attempt + 1)}

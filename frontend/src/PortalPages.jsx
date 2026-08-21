@@ -42,49 +42,27 @@ export function PortalPage({
   configState,
   sessionState,
   embedUrl,
-  expiresAt,
   error,
   onConfigRetry,
   onSessionRetry,
   onFrameLoad,
 }) {
-  const sessionTime = expiresAt
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(expiresAt))
-    : null;
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-canvas)] px-4 py-2.5 text-sm sm:px-6">
-        <div className="min-w-0">
-          <strong className="block truncate text-[var(--color-text-strong)]">{activeIdentity?.name || "Loading client"}</strong>
-          <span className="text-xs text-[var(--color-text-subtle)]">Client data is scoped by secure, server-signed access.</span>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${activeIdentity?.piiAccess ? "bg-[var(--color-positive-fill)] text-[var(--color-positive-text)]" : "bg-[var(--color-warning-fill)] text-[var(--color-warning-text)]"}`}>
-            Debtor State {activeIdentity?.piiAccess ? "visible" : "redacted"}
-          </span>
-          <span className="text-xs tabular-nums text-[var(--color-text-subtle)]">
-            {sessionState === "error" ? "Secure session unavailable" : sessionTime ? `Secure session until ${sessionTime}` : "Creating secure session"}
-          </span>
-        </div>
-      </div>
-
-      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-white" aria-busy={sessionState !== "ready"}>
-        {configState === "loading" && <LoadingState message="Loading approved client access…" />}
-        {configState === "error" && <ErrorState message={error} onRetry={onConfigRetry} />}
-        {configState === "ready" && ["loading", "loading-frame"].includes(sessionState) && <LoadingState message="Opening collections overview…" />}
-        {sessionState === "error" && <ErrorState message={`${error}. Please retry.`} onRetry={onSessionRetry} />}
-        {embedUrl && (
-          <iframe
-            key={embedUrl}
-            src={embedUrl}
-            className="block h-full min-h-0 w-full flex-1 border-0"
-            title={`SCSI collections overview for ${activeIdentity?.name || "selected client"}`}
-            allow="clipboard-read; clipboard-write"
-            onLoad={onFrameLoad}
-          />
-        )}
-      </div>
+    <div className="relative flex h-full min-h-0 w-full flex-1 overflow-hidden bg-white" aria-busy={sessionState !== "ready"}>
+      {configState === "loading" && <LoadingState message="Loading approved client access…" />}
+      {configState === "error" && <ErrorState message={error} onRetry={onConfigRetry} />}
+      {configState === "ready" && ["loading", "loading-frame"].includes(sessionState) && <LoadingState message="Opening collections overview…" />}
+      {sessionState === "error" && <ErrorState message={`${error}. Please retry.`} onRetry={onSessionRetry} />}
+      {embedUrl && (
+        <iframe
+          key={embedUrl}
+          src={embedUrl}
+          className="absolute inset-0 h-full w-full border-0"
+          title={`SCSI collections overview for ${activeIdentity?.name || "selected client"}`}
+          allow="clipboard-read; clipboard-write"
+          onLoad={onFrameLoad}
+        />
+      )}
     </div>
   );
 }
