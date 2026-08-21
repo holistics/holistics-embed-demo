@@ -275,7 +275,7 @@ export function CustomEmbedPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <form onSubmit={loadEmbed} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-[0_3px_10px_rgba(0,13,69,0.07)]">
         <label htmlFor="custom-embed-url" className="block text-sm font-semibold text-[var(--color-text-strong)]">Embed URL</label>
         <p id="custom-embed-hint" className="mt-1 text-xs leading-5 text-[var(--color-text-subtle)]">HTTPS only. The destination must permit iframe embedding.</p>
