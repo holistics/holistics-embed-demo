@@ -1,7 +1,21 @@
-# Local-dev and dead-runtime code. Vercel serves api/ and dist/ only.
+# SECRETS FIRST. When a .vercelignore exists the CLI uses it INSTEAD of
+# .gitignore, so .env being gitignored does not protect it here. Without
+# these lines `vercel deploy` uploads the portal secret, the session secret
+# and every password hash into the deployment bundle.
+.env
+.env.*
+!.env.example
+
+# Local-dev and dead-runtime code. Vercel serves dist/ and api/ only.
 backend/
-# NOTE: netlify/functions/ is NOT ignored -- api/ imports the auth and
-# user modules from it. Only the stale Cloudflare Pages dir is excluded.
-functions/api/
+scripts/
+.git/
+.netlify/
 node_modules/
 dist/
+
+# Stale Cloudflare Pages functions from the old tenant-switcher demo.
+# NOTE: netlify/functions/ is deliberately NOT ignored, because api/
+# imports the auth and user modules from it.
+functions/api/
+frontend/functions/
