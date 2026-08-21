@@ -14,6 +14,16 @@ async function readJson(response, fallbackMessage) {
   return data;
 }
 
+const SESSION_REFRESH_LEAD_MS = 60 * 1000;
+
+export function getSessionRefreshDelay(expiresAt, now = Date.now()) {
+  const expiresAtMs = Date.parse(expiresAt);
+
+  if (!Number.isFinite(expiresAtMs)) return null;
+
+  return Math.max(0, expiresAtMs - now - SESSION_REFRESH_LEAD_MS);
+}
+
 export async function fetchIdentities(signal) {
   const response = await fetch("/api/config", { signal });
   const data = await readJson(response, "The portfolio identities could not be loaded.");
@@ -38,7 +48,12 @@ export async function fetchEmbedSession(identityId, signal) {
   });
   const data = await readJson(response, "The secure portfolio session could not be created.");
 
-  if (typeof data.embedUrl !== "string" || typeof data.aiUrl !== "string" || !data.payloadPreview) {
+  if (
+    typeof data.embedUrl !== "string" ||
+    typeof data.aiUrl !== "string" ||
+    typeof data.expiresAt !== "string" ||
+    !data.payloadPreview
+  ) {
     throw new Error("The secure portfolio session could not be created.");
   }
 

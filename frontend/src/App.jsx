@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AccessPage, ConversationalAiPage, CustomEmbedPage, PortfolioPage, SubscriptionsPage } from "./PortalPages.jsx";
-import { fetchEmbedSession, fetchIdentities } from "./laasie-api.js";
+import { fetchEmbedSession, fetchIdentities, getSessionRefreshDelay } from "./laasie-api.js";
 
 const PAGES = [
   { id: "portfolio", label: "My Portfolio", eyebrow: "Owner analytics" },
@@ -98,6 +98,38 @@ export default function App() {
     loadSession();
     return () => controller.abort();
   }, [activeIdentityId, configState, sessionAttempt]);
+
+  useEffect(() => {
+    const refreshDelay = getSessionRefreshDelay(session?.expiresAt);
+
+    if (refreshDelay === null) return undefined;
+
+    let refreshRequested = false;
+    const refreshSession = () => {
+      if (refreshRequested) return;
+
+      refreshRequested = true;
+      setSessionAttempt((attempt) => attempt + 1);
+    };
+    const refreshResumedSession = () => {
+      if (
+        document.visibilityState === "visible" &&
+        getSessionRefreshDelay(session.expiresAt) === 0
+      ) {
+        refreshSession();
+      }
+    };
+    const timeoutId = window.setTimeout(refreshSession, refreshDelay);
+
+    document.addEventListener("visibilitychange", refreshResumedSession);
+    window.addEventListener("focus", refreshResumedSession);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", refreshResumedSession);
+      window.removeEventListener("focus", refreshResumedSession);
+    };
+  }, [session?.expiresAt]);
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-[var(--color-page)] text-[var(--color-text)]">
