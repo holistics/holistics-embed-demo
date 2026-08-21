@@ -5,8 +5,8 @@ import { fetchEmbedSession, fetchIdentities, getSessionRefreshDelay } from "./la
 const PAGES = [
   { id: "portfolio", label: "My Portfolio", eyebrow: "Owner analytics" },
   { id: "ai", label: "Laasie Insights", eyebrow: "Ask your portfolio" },
-  { id: "access", label: "Access scopes", eyebrow: "RLS identity guide" },
-  { id: "subscriptions", label: "Email subscriptions", eyebrow: "Scheduled delivery" },
+  { id: "access", label: "Access Scopes", eyebrow: "RLS identity guide" },
+  { id: "subscriptions", label: "Email Subscriptions", eyebrow: "Scheduled delivery" },
   { id: "custom", label: "Custom Embed", eyebrow: "Paste an embed URL" },
 ];
 
